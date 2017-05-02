@@ -6,32 +6,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define ENCRYPT 0
-#define DECRYPT 1
-#define KEYSIZE 16
+#include "aes.h"
 
-typedef struct {
-	int mode;
-	char key[KEYSIZE];
-	char *output_filename;
-	FILE *fin;
-}AES_INFO;
+__constant__ char D_SBOX[256];
+__constant__ char D_INV_SBOX[256];
 
-/**
- Returns pointer to struct containing information from command line -- 4 arguments expected
- Expected usage
- arg[0] - program name - not used
- arg[1] - Encrypt or decrypt (e for encrypt, d for decrypt)
- arg[2] - Filename containing our key
- arg[3] - Input file to encrypt/decrypt
- arg[4] - Output file name
-*/
-AES_INFO *get_args(char **argv, int argc);
-
-__global__ void addKernel(int *c, const int *a, const int *b)
+__global__ void AESKernel(int *c, const int *a, const int *b)
 {
-    int i = threadIdx.x;
-    c[i] = a[i] + b[i];
+    
 }
 
 int main(int argc, char **argv)
