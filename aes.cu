@@ -8,18 +8,18 @@
 
 #include "aes.h"
 
-__constant__ byte D_SBOX[16][16];
-__constant__ byte D_INV_SBOX[16][16];
+__constant__ unsigned char D_SBOX[16][16];
+__constant__ unsigned char D_INV_SBOX[16][16];
 
 //Global expanded key array - 44 words (4 words per round * 11 round keys needed)
-byte ExpandKey[44][4];
+unsigned char ExpandKey[44][4];
 
 //Global state matrix which will store the data on each AES round
-byte State[4][4];
+unsigned char State[4][4];
 
-__host__ void keyExpansion(byte * Key) {
+__host__ void keyExpansion(unsigned char * Key) {
 	//Temp word to store the previous word and to rotate word
-	byte temp[4], rtemp[4];
+	unsigned char temp[4], rtemp[4];
 	
 	//Word iteration (0-3). 4 words is 1 round key.
     int word_it;
@@ -78,15 +78,15 @@ int main(int argc, char **argv)
 	for (int i = 0; i < 256; i++)
 		h[i] = i;
 
-	byte *arr;
-	cudaMalloc((void**)&arr, sizeof(byte) * 256);
+	char *arr;
+	cudaMalloc((void**)&arr, sizeof(char) * 256);
 	cudaMemset(arr, 0, sizeof(char)*256);
 
-	cuda_error = cudaMemcpyToSymbol(D_SBOX, SBOX, sizeof(byte) * 256);
+	cuda_error = cudaMemcpyToSymbol(D_SBOX, SBOX, sizeof(char) * 256);
 	if (cuda_error != cudaSuccess) {
 		printf("error on copy SBOX");
 	}
-	cuda_error = cudaMemcpyToSymbol(D_INV_SBOX, INVERSE_SBOX, sizeof(byte) * 256)
+	cuda_error = cudaMemcpyToSymbol(D_INV_SBOX, INVERSE_SBOX, sizeof(char) * 256)
 	if (cuda_error != cudaSuccess) {
 		printf("error on copy INV_SBOX");
 	}
@@ -105,7 +105,7 @@ int main(int argc, char **argv)
     return 0;
 }
 
-//arg[0] - program name - not used - What is this for? Remove it and shift down the others?
+//arg[0] - program name - not used
 //arg[1] - Encrypt or decrypt(e for encrypt, d for decrypt)
 //arg[2] - Filename containing our key
 //arg[3] - Input file to encrypt / decrypt
