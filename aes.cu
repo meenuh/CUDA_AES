@@ -9,10 +9,15 @@
 #include "aes.h"
 
 __constant__ unsigned char D_SBOX[16][16];
+__constant__ unsigned char D_INV_SBOX[16][16];
+
+__device__ void keyExpansion() {
+
+}
 
 __global__ void AESKernel(char *x)
 {
-	printf("%02x %d %d\n", D_SBOX[threadIdx.x][threadIdx.y], threadIdx.x, threadIdx.y);
+	printf("%02x %d %d\n", D_INV_SBOX[threadIdx.x][threadIdx.y], threadIdx.x, threadIdx.y);
 	//printf("%02x", D_SBOX[threadIdx.x]);
 }
 
@@ -30,6 +35,10 @@ int main(int argc, char **argv)
 	if (cudaMemcpyToSymbol(D_SBOX, SBOX, sizeof(char) * 256) != cudaSuccess) {
 		printf("error on copy");
 	}
+	if (cudaMemcpyToSymbol(D_INV_SBOX, INVERSE_SBOX, sizeof(char) * 256) != cudaSuccess) {
+		printf("error on copy");
+	}
+
 	cudaMemcpy(arr, h, 256, cudaMemcpyHostToDevice);
 
 	dim3 block(16, 16);
