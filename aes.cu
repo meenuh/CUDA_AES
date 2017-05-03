@@ -8,18 +8,38 @@
 
 #include "aes.h"
 
-__constant__ char D_SBOX[256];
-__constant__ char D_INV_SBOX[256];
+__constant__ unsigned char D_SBOX[16][16];
 
-__global__ void AESKernel(int *c, const int *a, const int *b)
+__global__ void AESKernel(char *x)
 {
-    
+	printf("%02x %d %d\n", D_SBOX[threadIdx.x][threadIdx.y], threadIdx.x, threadIdx.y);
+	//printf("%02x", D_SBOX[threadIdx.x]);
 }
 
 int main(int argc, char **argv)
 {
 	AES_INFO *data = get_args(argv, argc);
+	char *h = (char *)malloc(256);
+	for (int i = 0; i < 256; i++)
+		h[i] = i;
 
+	char *arr;
+	cudaMalloc((void**)&arr, sizeof(char) * 256);
+	cudaMemset(arr, 0, sizeof(char)*256);
+
+	if (cudaMemcpyToSymbol(D_SBOX, SBOX, sizeof(char) * 256) != cudaSuccess) {
+		printf("error on copy");
+	}
+	cudaMemcpy(arr, h, 256, cudaMemcpyHostToDevice);
+
+	dim3 block(16, 16);
+
+	AESKernel << <1, block>> > (arr);
+	cudaError_t err = cudaGetLastError();
+	if(err != cudaSuccess)
+		fprintf(stderr, "err %s", cudaGetLastError());
+
+	cudaMemcpy(h, arr, 256, cudaMemcpyDeviceToHost);
     return 0;
 }
 
