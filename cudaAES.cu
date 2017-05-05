@@ -38,6 +38,9 @@
 #include <string.h>
 #include <time.h>
 
+#include <cuda_runtime.h>
+#include "device_launch_parameters.h"
+
 // Key size
 #define KEY_SIZE 128
 // Number of rounds the AES will execute
@@ -56,11 +59,13 @@
 
 typedef unsigned char byte;
 
+//TODO Change global definitions to be used as part of constant memory instead of global
+
 /**********************
  * GLOBAL DEFINITIONS *
  **********************/
 // SBOX matrix definition
-const byte SBOX[256] = {
+__device__ const byte SBOX[256] = {
     0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,
     0xCA, 0x82, 0xC9, 0x7D, 0xFA, 0x59, 0x47, 0xF0, 0xAD, 0xD4, 0xA2, 0xAF, 0x9C, 0xA4, 0x72, 0xC0,
     0xB7, 0xFD, 0x93, 0x26, 0x36, 0x3F, 0xF7, 0xCC, 0x34, 0xA5, 0xE5, 0xF1, 0x71, 0xD8, 0x31, 0x15,
@@ -80,7 +85,7 @@ const byte SBOX[256] = {
 };
 
 // Inverse SBOX matrix definition
-const byte INV_SBOX[256] = {
+__device__ const byte INV_SBOX[256] = {
     0x52, 0x09, 0x6A, 0xD5, 0x30, 0x36, 0xA5, 0x38, 0xBF, 0x40, 0xA3, 0x9E, 0x81, 0xF3, 0xD7, 0xFB,
     0x7C, 0xE3, 0x39, 0x82, 0x9B, 0x2F, 0xFF, 0x87, 0x34, 0x8E, 0x43, 0x44, 0xC4, 0xDE, 0xE9, 0xCB,
     0x54, 0x7B, 0x94, 0x32, 0xA6, 0xC2, 0x23, 0x3D, 0xEE, 0x4C, 0x95, 0x0B, 0x42, 0xFA, 0xC3, 0x4E,
@@ -100,7 +105,7 @@ const byte INV_SBOX[256] = {
 };
 
 // Roundkey array definition. Used on the key expansion step
-const byte Rcon[11] = {0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36};
+__device__ const byte Rcon[11] = {0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36};
 
 /* During MixColumns step, the matrix multiplication its done using the following
  * tables. By this way, the matrix multiplication needs less computational
@@ -228,7 +233,7 @@ int CYPHER_OP;
 byte Buffer[MAX_BUFFER_LENGTH];
 
 // Expanded key array definition. Its length depends on the round numbers*/
-byte ExpandKey[44][4];
+__device__ byte ExpandKey[44][4];
 // Key array
 byte Key[32];
 // State matrix which will store the data on each AES round
@@ -381,12 +386,14 @@ void KeyExpansion(byte * Key) {
         if (Round_it % KEY_EXP == 0) {
             /* Each 8 words, rotate the word and apply the SBOX */
             RotateWord(temp, 1, ENCRYPT);
-            for (word_it = 0; word_it < 4; ++word_it)temp[word_it] = SBOX[(((temp[word_it]&0xf0) >> 4)*16)+(temp[word_it]&0x0f)];
+            for (word_it = 0; word_it < 4; ++word_it)
+				temp[word_it] = SBOX[(((temp[word_it]&0xf0) >> 4)*16)+(temp[word_it]&0x0f)];
             /*XOR of the first element with the corresponding RCON value */
             temp[0] ^= Rcon[Round_it / KEY_EXP];
         }
         /* For all the words, aply an XOR with the block N bytes before the current one */
-        for (word_it = 0; word_it < 4; word_it++) temp[word_it] ^= ExpandKey[Round_it - KEY_EXP][word_it];
+        for (word_it = 0; word_it < 4; word_it++) 
+			temp[word_it] ^= ExpandKey[Round_it - KEY_EXP][word_it];
         // Store the new word on th expanded key
         memcpy(ExpandKey[Round_it], temp, 4);
     }
@@ -485,14 +492,20 @@ void closeAES(FILE* in, FILE * out) {
  * @param State The state matrix to process.
  * @param round The round number.
  */
-__device__ void AddRoundKey(byte State[4][4], byte round) {
-    int st_f, st_c;
+__device__ void AddRoundKey(byte *State, byte round) {
+	int st_f = threadIdx.x;
+	int st_c = threadIdx.y;
 
-    for (st_f = 0; st_f < 4; st_f++) {
-        for (st_c = 0; st_c < 4; st_c++) {
-            State[st_f][st_c] ^= ExpandKey[round * 4 + st_f][st_c];
-        }
-    }
+	if(st_f % 4 && st_c % 4)
+		State[4 * st_f + st_c] ^= ExpandKey[round * 4 + st_f][st_c];
+
+    //for (st_f = 0; st_f < 4; st_f++) {
+    //    for (st_c = 0; st_c < 4; st_c++) {
+    //        State[st_f][st_c] ^= ExpandKey[round * 4 + st_f][st_c];
+    //    }
+    //}
+
+
 }
 
 /**
@@ -501,24 +514,41 @@ __device__ void AddRoundKey(byte State[4][4], byte round) {
  * @param State The state matrix to process.
  * @param operation The operation to process (ENCRYPT or DECRYPT).
  */
-__device__ void SubBytes(byte State[4][4], byte operation) {
+__device__ void SubBytes(byte *State, byte operation) {
     int state_f, state_c, sbox_f, sbox_c;
 
-    for (state_f = 0; state_f < 4; state_f++) {
-        for (state_c = 0; state_c < 4; state_c++) {
-            sbox_f = (State[state_f][state_c]&0xf0) >> 4;
-            sbox_c = State[state_f][state_c]&0x0f;
-            switch (operation) {
-                case ENCRYPT:
-                    State[state_f][state_c] = SBOX[sbox_f * 16 + sbox_c];
-                    break;
-                case DECRYPT:
-                    State[state_f][state_c] = INV_SBOX[sbox_f * 16 + sbox_c];
-                    break;
-                default: break;
-            };
-        }
-    }
+	//TODO only need 4x4 threads but we have 16x16 
+	state_f = threadIdx.x;
+	state_c = threadIdx.y;
+
+	int pos = 4 * state_f + state_c;
+	byte st = State[pos];
+
+	sbox_f = st & 0xF0;
+	sbox_c = st & 0x0F;
+
+	if (operation == ENCRYPT) {
+		State[pos] = SBOX[sbox_f * 16 + sbox_c];
+	}
+	else {
+		State[pos] = INV_SBOX[sbox_f * 16 + sbox_c];
+	}
+
+    //for (state_f = 0; state_f < 4; state_f++) {
+    //    for (state_c = 0; state_c < 4; state_c++) {
+    //        sbox_f = (State[state_f][state_c]&0xf0) >> 4;
+    //        sbox_c = State[state_f][state_c]&0x0f;
+    //        switch (operation) {
+    //            case ENCRYPT:
+    //                State[state_f][state_c] = SBOX[sbox_f * 16 + sbox_c];
+    //                break;
+    //            case DECRYPT:
+    //                State[state_f][state_c] = INV_SBOX[sbox_f * 16 + sbox_c];
+    //                break;
+    //            default: break;
+    //        };
+    //    }
+    //}
 }
 
 /**
@@ -527,15 +557,18 @@ __device__ void SubBytes(byte State[4][4], byte operation) {
  * @param State The state matrix to process.
  * @param operation The operation to process (ENCRYPT or DECRYPT).
  */
-__device__ void ShiftRows(byte State[4][4], byte inversa) {
-    int state_col, w_it;
+__device__ void ShiftRows(byte *State, byte inversa) {
+    int state_col = threadIdx.y, w_it = threadIdx.x;
     byte w[4];
 
-    for (state_col = 1; state_col < 4; ++state_col) {
-        for (w_it = 0; w_it < 4; ++w_it) w[w_it] = State[w_it][state_col];
-        RotateWord(w, state_col, inversa);
-        for (w_it = 0; w_it < 4; ++w_it) State[w_it][state_col] = w[w_it];
-    }
+	if (state_col != 1) {
+
+	}
+    //for (state_col = 1; state_col < 4; ++state_col) {
+    //    for (w_it = 0; w_it < 4; ++w_it) w[w_it] = State[w_it][state_col];
+    //    RotateWord(w, state_col, inversa);
+    //    for (w_it = 0; w_it < 4; ++w_it) State[w_it][state_col] = w[w_it];
+    //}
 }
 
 /**
@@ -544,30 +577,39 @@ __device__ void ShiftRows(byte State[4][4], byte inversa) {
  * @param State The state matrix to process.
  * @param operation The operation to process (ENCRYPT or DECRYPT).
  */
-__device__ void MixColumns(byte State[4][4], byte operation) {
-    int row, col;
+__device__ void MixColumns(byte *State, byte operation) {
+    int row = threadIdx.x, col = threadIdx.y;
+	int pos = 4 * row;
     byte tmp[4];
 
     switch (operation) {
         case ENCRYPT:
-            for (row = 0; row < 4; ++row) {
-                tmp[0] = GM2[State[row][0]] ^ GM3[State[row][1]] ^ State[row][2] ^ State[row][3];
+			tmp[0] = GM2[State[pos]] ^ GM3[State[pos + 1]] ^ State[pos + 2] ^ State[pos + 3];
+			tmp[1] = State[pos] ^ GM2[State[pos + 1]] ^ GM3[State[pos + 2]] ^ State[pos + 3];
+			tmp[2] = State[pos] ^ State[pos + 1] ^ GM2[State[pos + 2]] ^ GM3[State[pos + 3]];
+			tmp[3] = GM3[State[pos]] ^ State[pos + 1] ^ State[pos + 2] ^ GM2[State[pos + 3]];
+
+			State[pos + col] = tmp[col];
+            //for (row = 0; row < 4; ++row) {
+               /* tmp[0] = GM2[State[row] ^ GM3[State[row][1]] ^ State[row][2] ^ State[row][3];
                 tmp[1] = State[row][0] ^ GM2[State[row][1]] ^ GM3[State[row][2]] ^ State[row][3];
                 tmp[2] = State[row][0] ^ State[row][1] ^ GM2[State[row][2]] ^ GM3[State[row][3]];
-                tmp[3] = GM3[State[row][0]] ^ State[row][1] ^ State[row][2] ^ GM2[State[row][3]];
+                tmp[3] = GM3[State[row][0]] ^ State[row][1] ^ State[row][2] ^ GM2[State[row][3]];*/
                 /*Asignamos tmp al State*/
-                for (col = 0; col < 4; ++col)State[row][col] = tmp[col];
-            }
+               // for (col = 0; col < 4; ++col)State[row][col] = tmp[col];
+           // }
             break;
         case DECRYPT:
-            for (row = 0; row < 4; ++row) {
-                tmp[0] = GM14[State[row][0]] ^ GM11[State[row][1]] ^ GM13[State[row][2]] ^ GM9[State[row][3]];
-                tmp[1] = GM9[State[row][0]] ^ GM14[State[row][1]] ^ GM11[State[row][2]] ^ GM13[State[row][3]];
-                tmp[2] = GM13[State[row][0]] ^ GM9[State[row][1]] ^ GM14[State[row][2]] ^ GM11[State[row][3]];
-                tmp[3] = GM11[State[row][0]] ^ GM13[State[row][1]] ^ GM9[State[row][2]] ^ GM14[State[row][3]];
+            //for (row = 0; row < 4; ++row) {
+                tmp[0] = GM14[State[pos]] ^ GM11[State[pos + 1]] ^ GM13[State[pos + 2]] ^ GM9[State[pos + 3]];
+                tmp[1] = GM9[State[pos]] ^ GM14[State[pos + 1]] ^ GM11[State[pos + 2]] ^ GM13[State[pos + 3]];
+                tmp[2] = GM13[State[pos]] ^ GM9[State[pos + 1]] ^ GM14[State[pos + 2]] ^ GM11[State[pos + 3]];
+                tmp[3] = GM11[State[pos]] ^ GM13[State[pos + 1]] ^ GM9[State[pos + 2]] ^ GM14[State[pos + 3]];
+
+				State[pos + col] = tmp[col];
                 /*Asignamos tmp al State*/
-                for (col = 0; col < 4; ++col)State[row][col] = tmp[col];
-            }
+                //for (col = 0; col < 4; ++col)State[row][col] = tmp[col];
+            //}
             break;
         default:
             break;
@@ -580,7 +622,7 @@ __device__ void MixColumns(byte State[4][4], byte operation) {
  * @param State The state matrix to process.
  * @param operation The operation to process (ENCRYPT or DECRYPT).
  */
-__global__ void executeAES(byte State[4][4], byte operation) {
+__global__ void executeAES(byte *State, byte operation) {
     int round_it;
     
     if (operation == DECRYPT) {
@@ -625,8 +667,8 @@ int main(int argc, char** argv) {
     FILE *inFile, *outFile, *keyFile = NULL;
 
     /* Clock variables to show the time elapsed */
-    clock_t clockCounter;
-    unsigned long totalTime = 0L;
+    //clock_t clockCounter;
+    //unsigned long totalTime = 0L;
 
     if (argc == 5) {
         initAES(argv[1], &inFile, &outFile, keyFile, argv[2], argv[3], argv[4]);
@@ -648,15 +690,20 @@ int main(int argc, char** argv) {
             }
 
             /* Start timing */
-            clockCounter = clock();
+            //clockCounter = clock();
+
+			byte *d_state = NULL;
+			cudaMalloc((void **)&d_state, 4 * 4);
 
             /* Process every state matrix from the buffer */
             for (states_it = 0; states_it < nStatesInBuffer; states_it++) {
                 // Init current state matrix
                 memcpy(State, Buffer + states_it * 16, 16);
+				cudaMemcpy(d_state, State, 4 * 4, cudaMemcpyHostToDevice);
 
                 // AES execution
-                executeAES <<<1, 1>>>(State, CYPHER_OP);
+				dim3 block(16, 16);
+                executeAES <<<1, block>>>(d_state, CYPHER_OP);
 
                 // Replace the original data on the buffer with the result.
                 memcpy(Buffer + states_it * 16, State, 16);
@@ -664,10 +711,10 @@ int main(int argc, char** argv) {
                     printf("Processed %lu%% from the buffer       \r", (states_it + 1) *100 / nStatesInBuffer);
                 }
             }
-            printf("Data processed in %Lf seconds    \n"
-                    "", ((long double) clock() - clockCounter) / CLOCKS_PER_SEC);
+            //printf("Data processed in %Lf seconds    \n"
+            //        "", ((long double) clock() - clockCounter) / CLOCKS_PER_SEC);
 
-            totalTime += ((unsigned long) clock() - clockCounter) / CLOCKS_PER_SEC;
+            //totalTime += ((unsigned long) clock() - clockCounter) / CLOCKS_PER_SEC;
 
             // Write the buffer to the output file
             bytesWritten = WriteBuffer(Buffer, nStatesInBuffer, outFile, (*argv[1] == 'd') ? DECRYPT : ENCRYPT);
@@ -685,7 +732,7 @@ int main(int argc, char** argv) {
         closeAES(inFile, outFile);
         printf("\n\nPROCESS FINISHED!!\n");
         printf("Processed: %lu bytes \nHDD I/O operations: %d I/Os\n", processedBytes, hdd_cont);
-        printf("Time elapsed: %lu seconds (aprox).\n", totalTime);
+        //printf("Time elapsed: %lu seconds (aprox).\n", totalTime);
         Pause();
         return (EXIT_SUCCESS);
     } else {
