@@ -610,36 +610,35 @@ __device__ void ShiftRows(byte *State, byte inversa) {
 __device__ void MixColumns(byte *State, byte operation) {
 	int row = threadIdx.x, col = threadIdx.y;
 	int pos = 4 * row;
-	byte tmp[4];
+	//Each thread calculates one byte in the 4x4 byte matrix
+	byte tmp;
 
 	switch (operation) {
 	case ENCRYPT:
-		tmp[0] = GM2[State[pos]] ^ GM3[State[pos + 1]] ^ State[pos + 2] ^ State[pos + 3];
-		tmp[1] = State[pos] ^ GM2[State[pos + 1]] ^ GM3[State[pos + 2]] ^ State[pos + 3];
-		tmp[2] = State[pos] ^ State[pos + 1] ^ GM2[State[pos + 2]] ^ GM3[State[pos + 3]];
-		tmp[3] = GM3[State[pos]] ^ State[pos + 1] ^ State[pos + 2] ^ GM2[State[pos + 3]];
+		if(col == 0)
+			tmp = GM2[State[pos]] ^ GM3[State[pos + 1]] ^ State[pos + 2] ^ State[pos + 3];
+		else if (col == 1)
+			tmp = State[pos] ^ GM2[State[pos + 1]] ^ GM3[State[pos + 2]] ^ State[pos + 3];
+		else if (col == 2)
+			tmp = State[pos] ^ State[pos + 1] ^ GM2[State[pos + 2]] ^ GM3[State[pos + 3]];
+		else if (col == 3)
+			tmp = GM3[State[pos]] ^ State[pos + 1] ^ State[pos + 2] ^ GM2[State[pos + 3]];
 
-		State[pos + col] = tmp[col];
-		//for (row = 0; row < 4; ++row) {
-		/* tmp[0] = GM2[State[row] ^ GM3[State[row][1]] ^ State[row][2] ^ State[row][3];
-		tmp[1] = State[row][0] ^ GM2[State[row][1]] ^ GM3[State[row][2]] ^ State[row][3];
-		tmp[2] = State[row][0] ^ State[row][1] ^ GM2[State[row][2]] ^ GM3[State[row][3]];
-		tmp[3] = GM3[State[row][0]] ^ State[row][1] ^ State[row][2] ^ GM2[State[row][3]];*/
-		/*Asignamos tmp al State*/
-		// for (col = 0; col < 4; ++col)State[row][col] = tmp[col];
-		// }
+		State[pos + col] = tmp;
+
 		break;
 	case DECRYPT:
-		//for (row = 0; row < 4; ++row) {
-		tmp[0] = GM14[State[pos]] ^ GM11[State[pos + 1]] ^ GM13[State[pos + 2]] ^ GM9[State[pos + 3]];
-		tmp[1] = GM9[State[pos]] ^ GM14[State[pos + 1]] ^ GM11[State[pos + 2]] ^ GM13[State[pos + 3]];
-		tmp[2] = GM13[State[pos]] ^ GM9[State[pos + 1]] ^ GM14[State[pos + 2]] ^ GM11[State[pos + 3]];
-		tmp[3] = GM11[State[pos]] ^ GM13[State[pos + 1]] ^ GM9[State[pos + 2]] ^ GM14[State[pos + 3]];
+		if (col == 0)
+			tmp = GM14[State[pos]] ^ GM11[State[pos + 1]] ^ GM13[State[pos + 2]] ^ GM9[State[pos + 3]];
+		else if (col == 1)
+			tmp = GM9[State[pos]] ^ GM14[State[pos + 1]] ^ GM11[State[pos + 2]] ^ GM13[State[pos + 3]];
+		else if (col == 2)
+			tmp = GM13[State[pos]] ^ GM9[State[pos + 1]] ^ GM14[State[pos + 2]] ^ GM11[State[pos + 3]];
+		else if (col == 3)
+			tmp = GM11[State[pos]] ^ GM13[State[pos + 1]] ^ GM9[State[pos + 2]] ^ GM14[State[pos + 3]];
 
-		State[pos + col] = tmp[col];
-		/*Asignamos tmp al State*/
-		//for (col = 0; col < 4; ++col)State[row][col] = tmp[col];
-		//}
+		State[pos + col] = tmp;
+		
 		break;
 	default:
 		break;
