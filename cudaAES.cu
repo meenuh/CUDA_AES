@@ -562,7 +562,9 @@ __device__ void ShiftRows(byte *State, byte inversa) {
     byte w[4];
 
 	if (state_col != 1) {
-
+		w[w_it] = State[4 * w_it + state_col];
+		//TODO change rotate word to device function but must fix init function to not use it
+		State[4 * w_it + state_col] = w[w_it];
 	}
     //for (state_col = 1; state_col < 4; ++state_col) {
     //    for (w_it = 0; w_it < 4; ++w_it) w[w_it] = State[w_it][state_col];
@@ -702,7 +704,7 @@ int main(int argc, char** argv) {
 				cudaMemcpy(d_state, State, 4 * 4, cudaMemcpyHostToDevice);
 
                 // AES execution
-				dim3 block(16, 16);
+				dim3 block(4, 4);
                 executeAES <<<1, block>>>(d_state, CYPHER_OP);
 
                 // Replace the original data on the buffer with the result.
