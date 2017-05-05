@@ -304,6 +304,30 @@ void RotateWord(byte* wordToRotate, byte positions, byte operation) {
 }
 
 /**
+* Rotate a given word on the GPGPU.
+*
+* @param wordToRotate The word we want to rotate.
+* @param positions The number of positions to rotate.
+* @param operation If the rotation is left (ENCRYPT) or right (DECRYPT).
+*/
+__device__ void CUDARotateWord(byte* w, byte n, byte inv) {
+	// Copy the word array (4 byte_
+	byte tmp[4] = { w[0], w[1], w[2], w[3] };
+	int w_it, tmp_it;
+
+	// Rotate array by n bytes
+	for (w_it = 0; w_it < 4; w_it++) {
+		if (!inv) {
+			w[w_it] = tmp[(w_it + n) % 4];
+		}
+		else {
+			tmp_it = ((w_it + n * (-1)) % 4);
+			w[w_it] = tmp[(tmp_it < 0) ? tmp_it + 4 : tmp_it];
+		}
+	}
+}
+
+/**
 * Read a file and stores the data into the data buffer.
 * @param inFile The file to read (already opened).
 * @return  The number of bytes read
@@ -589,11 +613,28 @@ __device__ void ShiftRows(byte *State, byte inversa) {
 	int state_col = threadIdx.y, w_it = threadIdx.x;
 	byte w[4];
 
-	if (state_col != 1) {
+	//Run each line the correct # of times
+	//Setting w[it] is ran 4 times per row excluding 1st row - 12 threads
+	// CUDARotateWord is ran 1 time per row excluding 1st row - 3 threads
+	if (state_col == 1) {
 		w[w_it] = State[4 * w_it + state_col];
-		//TODO change rotate word to device function but must fix init function to not use it
+		if (w_it == 0)
+			CUDARotateWord(w, state_col, inversa);
 		State[4 * w_it + state_col] = w[w_it];
 	}
+	else if (state_col == 2) {
+		w[w_it] = State[4 * w_it + state_col];
+		if (w_it == 0)
+			CUDARotateWord(w, state_col, inversa);
+		State[4 * w_it + state_col] = w[w_it];
+	}
+	else if (state_col == 3) {
+		w[w_it] = State[4 * w_it + state_col];
+		if (w_it == 0)
+			CUDARotateWord(w, state_col, inversa);
+		State[4 * w_it + state_col] = w[w_it];
+	}
+
 	//for (state_col = 1; state_col < 4; ++state_col) {
 	//    for (w_it = 0; w_it < 4; ++w_it) w[w_it] = State[w_it][state_col];
 	//    RotateWord(w, state_col, inversa);
