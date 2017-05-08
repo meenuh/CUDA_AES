@@ -548,16 +548,7 @@ __device__ void AddRoundKey(byte *State, byte round, byte* gpuExpandedKey) {
 	int st_f = threadIdx.x;
 	int st_c = threadIdx.y;
 
-	if (st_f % 4 && st_c % 4)
-		State[4 * st_f + st_c] ^= gpuExpandedKey[(round * 4 + st_f) * 4 + st_c];
-
-	//for (st_f = 0; st_f < 4; st_f++) {
-	//    for (st_c = 0; st_c < 4; st_c++) {
-	//        State[st_f][st_c] ^= ExpandKey[round * 4 + st_f][st_c];
-	//    }
-	//}
-
-
+	State[4 * st_f + st_c] ^= gpuExpandedKey[(round * 4 + st_f) * 4 + st_c];
 }
 
 /**
@@ -585,22 +576,6 @@ __device__ void SubBytes(byte *State, byte operation) {
 	else {
 		State[pos] = INV_SBOX[sbox_f * 16 + sbox_c];
 	}
-
-	//for (state_f = 0; state_f < 4; state_f++) {
-	//    for (state_c = 0; state_c < 4; state_c++) {
-	//        sbox_f = (State[state_f][state_c]&0xf0) >> 4;
-	//        sbox_c = State[state_f][state_c]&0x0f;
-	//        switch (operation) {
-	//            case ENCRYPT:
-	//                State[state_f][state_c] = SBOX[sbox_f * 16 + sbox_c];
-	//                break;
-	//            case DECRYPT:
-	//                State[state_f][state_c] = INV_SBOX[sbox_f * 16 + sbox_c];
-	//                break;
-	//            default: break;
-	//        };
-	//    }
-	//}
 }
 
 /**
@@ -634,12 +609,6 @@ __device__ void ShiftRows(byte *State, byte inversa) {
 			CUDARotateWord(w, state_col, inversa);
 		State[4 * w_it + state_col] = w[w_it];
 	}
-
-	//for (state_col = 1; state_col < 4; ++state_col) {
-	//    for (w_it = 0; w_it < 4; ++w_it) w[w_it] = State[w_it][state_col];
-	//    RotateWord(w, state_col, inversa);
-	//    for (w_it = 0; w_it < 4; ++w_it) State[w_it][state_col] = w[w_it];
-	//}
 }
 
 /**
@@ -744,8 +713,9 @@ int main(int argc, char** argv) {
 	cudaError_t cuda_error;
 
 	/* Clock variables to show the time elapsed */
-	//clock_t clockCounter;
-	//unsigned long totalTime = 0L;
+	cudaEvent_t start, stop;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
 
 	if (argc == 5) {
 		initAES(argv[1], &inFile, &outFile, keyFile, argv[2], argv[3], argv[4]);
@@ -781,7 +751,7 @@ int main(int argc, char** argv) {
 			}
 
 			/* Start timing */
-			//clockCounter = clock();
+			cudaEventRecord(start);
 
 			byte *d_state = NULL;
 			cudaMalloc((void **)&d_state, 4 * 4);
@@ -802,10 +772,6 @@ int main(int argc, char** argv) {
 					printf("Processed %lu%% from the buffer       \r", (states_it + 1) * 100 / nStatesInBuffer);
 				}
 			}
-			//printf("Data processed in %Lf seconds    \n"
-			//        "", ((long double) clock() - clockCounter) / CLOCKS_PER_SEC);
-
-			//totalTime += ((unsigned long) clock() - clockCounter) / CLOCKS_PER_SEC;
 
 			// Write the buffer to the output file
 			bytesWritten = WriteBuffer(Buffer, nStatesInBuffer, outFile, (*argv[1] == 'd') ? DECRYPT : ENCRYPT);
@@ -819,6 +785,7 @@ int main(int argc, char** argv) {
 			// Update the number of bytes processed
 			processedBytes += bytesRead;
 		}
+		cudaEventRecord(stop);
 
 		cuda_error = cudaFree(gpuExpKeyBuffer);
 		if (cuda_error != cudaSuccess) {
@@ -829,7 +796,10 @@ int main(int argc, char** argv) {
 		closeAES(inFile, outFile);
 		printf("\n\nPROCESS FINISHED!!\n");
 		printf("Processed: %lu bytes \nHDD I/O operations: %d I/Os\n", processedBytes, hdd_cont);
-		//printf("Time elapsed: %lu seconds (aprox).\n", totalTime);
+		float ms = 0;
+		cudaEventElapsedTime(&ms, start, stop);
+		printf("Non-optimized AES time elapsed for %s: %.2f ms\n", *argv[1] == 'd' ? "decryption" : "encryption", ms);
+		
 		Pause();
 		return (EXIT_SUCCESS);
 	}
