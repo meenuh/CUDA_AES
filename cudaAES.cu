@@ -668,6 +668,7 @@ __global__ void executeAES(byte *State, byte operation, byte* ExpandKey_gpu) {
 		AddRoundKey(State, 14, ExpandKey_gpu);
 		ShiftRows(State, DECRYPT);
 		SubBytes(State, DECRYPT);
+		#pragma unroll
 		for (round_it = ROUNDS - 1; round_it > 0; round_it--) {
 			AddRoundKey(State, round_it, ExpandKey_gpu);
 			MixColumns(State, DECRYPT);
@@ -678,6 +679,7 @@ __global__ void executeAES(byte *State, byte operation, byte* ExpandKey_gpu) {
 	}
 	else {
 		AddRoundKey(State, 0, ExpandKey_gpu);
+		#pragma unroll
 		for (round_it = 1; round_it < ROUNDS; round_it++) {
 			SubBytes(State, ENCRYPT);
 			ShiftRows(State, ENCRYPT);
@@ -804,6 +806,6 @@ int main(int argc, char** argv) {
 		return (EXIT_SUCCESS);
 	}
 	else {
-		printf("Execution command: '$>./AES <operation> <key_length> <input_file> <output_file> <key_file>'\n");
+		printf("Execution command: '$>./AES <operation> <input_file> <output_file> <key_file>'\n");
 	}
 }
