@@ -567,7 +567,7 @@ __device__ void SubBytes(byte *State, byte operation) {
 	int pos = 4 * state_f + state_c;
 	byte st = State[pos];
 
-	sbox_f = st & 0xF0;
+	sbox_f = (st & 0xF0) >> 4;
 	sbox_c = st & 0x0F;
 
 	if (operation == ENCRYPT) {
@@ -592,21 +592,27 @@ __device__ void ShiftRows(byte *State, byte inversa) {
 	//Setting w[it] is ran 4 times per row excluding 1st row - 12 threads
 	// CUDARotateWord is ran 1 time per row excluding 1st row - 3 threads
 	if (state_col == 1) {
-		w[w_it] = State[4 * w_it + state_col];
-		if (w_it == 0)
-			CUDARotateWord(w, state_col, inversa);
+		//w[w_it] = State[4 * w_it + state_col];
+		for (w_it = 0; w_it < 4; ++w_it) w[w_it] = State[4 * w_it + state_col];
+		__syncthreads();
+		//if (w_it == 0)
+		CUDARotateWord(w, state_col, inversa);
 		State[4 * w_it + state_col] = w[w_it];
 	}
 	else if (state_col == 2) {
-		w[w_it] = State[4 * w_it + state_col];
-		if (w_it == 0)
-			CUDARotateWord(w, state_col, inversa);
+		//w[w_it] = State[4 * w_it + state_col];
+		for (w_it = 0; w_it < 4; ++w_it) w[w_it] = State[4 * w_it + state_col];
+		__syncthreads();
+		//if (w_it == 0)
+		CUDARotateWord(w, state_col, inversa);
 		State[4 * w_it + state_col] = w[w_it];
 	}
 	else if (state_col == 3) {
-		w[w_it] = State[4 * w_it + state_col];
-		if (w_it == 0)
-			CUDARotateWord(w, state_col, inversa);
+		//w[w_it] = State[4 * w_it + state_col];
+		for (w_it = 0; w_it < 4; ++w_it) w[w_it] = State[4 * w_it + state_col];
+		__syncthreads();
+		//if (w_it == 0)
+		CUDARotateWord(w, state_col, inversa);
 		State[4 * w_it + state_col] = w[w_it];
 	}
 }
@@ -668,7 +674,7 @@ __global__ void executeAES(byte *State, byte operation, byte* ExpandKey_gpu) {
 		AddRoundKey(State, 14, ExpandKey_gpu);
 		ShiftRows(State, DECRYPT);
 		SubBytes(State, DECRYPT);
-		#pragma unroll
+		//#pragma unroll
 		for (round_it = ROUNDS - 1; round_it > 0; round_it--) {
 			AddRoundKey(State, round_it, ExpandKey_gpu);
 			MixColumns(State, DECRYPT);
@@ -679,7 +685,7 @@ __global__ void executeAES(byte *State, byte operation, byte* ExpandKey_gpu) {
 	}
 	else {
 		AddRoundKey(State, 0, ExpandKey_gpu);
-		#pragma unroll
+		//#pragma unroll
 		for (round_it = 1; round_it < ROUNDS; round_it++) {
 			SubBytes(State, ENCRYPT);
 			ShiftRows(State, ENCRYPT);
@@ -767,9 +773,9 @@ int main(int argc, char** argv) {
 				// AES execution
 				dim3 block(4, 4);
 				executeAES << <1, block >> >(d_state, CYPHER_OP, gpuExpKeyBuffer);
-
+				cudaMemcpy((Buffer + states_it * 16), d_state, 16, cudaMemcpyDeviceToHost);
 				// Replace the original data on the buffer with the result.
-				memcpy(Buffer + states_it * 16, State, 16);
+				//memcpy(Buffer + states_it * 16, State, 16);
 				if (states_it % 5000 == 0) {
 					printf("Processed %lu%% from the buffer       \r", (states_it + 1) * 100 / nStatesInBuffer);
 				}
