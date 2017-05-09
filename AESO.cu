@@ -1,13 +1,13 @@
-
+/*
 Copyright 2012 Ruben Sanchez Castellano
 
-This file is part of the final degree project called ESTUDI DE VIABILITAT
-DE LA TECNOLOGIA CUDA PER L’ACCELERACIo DE PROCESSOS (FEASIBILITY STUDY
-OF CUDA TECHNOLOGY FOR PROCESSES ACCELERATION) authored by
-Ruben Sanchez Castellano. This project is also entirely	available at
-httpupcommons.upc.edupfchandle2099.115165.
+This file is part of the final degree project called "ESTUDI DE VIABILITAT
+DE LA TECNOLOGIA CUDA PER Lâ€™ACCELERACIo DE PROCESSOS" ("FEASIBILITY STUDY
+OF CUDA TECHNOLOGY FOR PROCESSES ACCELERATION") authored by
+Ruben Sanchez Castellano. This project is also entirely	available at:
+<http://upcommons.upc.edu/pfc/handle/2099.1/15165>.
 
-Foobar is free software you can redistribute it andor modify
+Foobar is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
@@ -18,53 +18,53 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Foobar.  If not, see httpwww.gnu.orglicenses.
+along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
+*/
 
-
- Flag needed to support files grater than 2GB
+// Flag needed to support files grater than 2GB
 #define _FILE_OFFSET_BITS 64
 
- FIX Solves Windows warning when opening files with fopen()
+// FIX: Solves Windows warning when opening files with fopen()
 #ifdef _WIN32
 #define _CRT_SECURE_NO_DEPRECATE
-#define Pause() system(PAUSE);
+#define Pause() system("PAUSE");
 #else
 #define fopen fopen64
 #define Pause() {}
 #endif
 
-#include stdio.h
-#include stdlib.h
-#include string.h
-#include time.h
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
-#include cuda_runtime.h
-#include device_launch_parameters.h
+#include <cuda_runtime.h>
+#include "device_launch_parameters.h"
 
- Key size
+// Key size
 #define KEY_SIZE 128
- Number of rounds the AES will execute
+// Number of rounds the AES will execute
 #define ROUNDS 10
- Key length (as a power of 2)
+// Key length (as a power of 2)
 #define KEY_EXP 4
- Definitions the cypher operations
+// Definitions the cypher operations
 #define DECRYPT 1
 #define ENCRYPT 0
- AES State matrix size definition
+// AES State matrix size definition
 #define STATE_SIZE 16
- Number of max STATE matrix hold on memory
+// Number of max STATE matrix hold on memory
 #define NUM_STATE_BUFFER 33553920
- So define the data buffer length as the max number of matrix times its size
-#define MAX_BUFFER_LENGTH STATE_SIZENUM_STATE_BUFFER
+// So define the data buffer length as the max number of matrix times its size
+#define MAX_BUFFER_LENGTH STATE_SIZE*NUM_STATE_BUFFER
 
 typedef unsigned char byte;
 
-TODO Change global definitions to be used as part of constant memory instead of global
+//TODO Change global definitions to be used as part of constant memory instead of global
 
-
- GLOBAL DEFINITIONS 
-
- SBOX matrix definition - Called by CPU host - KeyExpansion
+/**********************
+* GLOBAL DEFINITIONS *
+**********************/
+// SBOX matrix definition - Called by CPU host - KeyExpansion
 const byte H_SBOX[256] = {
 	0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,
 	0xCA, 0x82, 0xC9, 0x7D, 0xFA, 0x59, 0x47, 0xF0, 0xAD, 0xD4, 0xA2, 0xAF, 0x9C, 0xA4, 0x72, 0xC0,
@@ -84,7 +84,7 @@ const byte H_SBOX[256] = {
 	0x8C, 0xA1, 0x89, 0x0D, 0xBF, 0xE6, 0x42, 0x68, 0x41, 0x99, 0x2D, 0x0F, 0xB0, 0x54, 0xBB, 0x16
 };
 
- SBOX matrix definition - Called by GPU device - SubBytes
+// SBOX matrix definition - Called by GPU device - SubBytes
 __device__ const byte SBOX[256] = {
 	0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,
 	0xCA, 0x82, 0xC9, 0x7D, 0xFA, 0x59, 0x47, 0xF0, 0xAD, 0xD4, 0xA2, 0xAF, 0x9C, 0xA4, 0x72, 0xC0,
@@ -104,7 +104,7 @@ __device__ const byte SBOX[256] = {
 	0x8C, 0xA1, 0x89, 0x0D, 0xBF, 0xE6, 0x42, 0x68, 0x41, 0x99, 0x2D, 0x0F, 0xB0, 0x54, 0xBB, 0x16
 };
 
- Inverse SBOX matrix definition - Called by GPU device - SubBytes
+// Inverse SBOX matrix definition - Called by GPU device - SubBytes
 __device__ const byte INV_SBOX[256] = {
 	0x52, 0x09, 0x6A, 0xD5, 0x30, 0x36, 0xA5, 0x38, 0xBF, 0x40, 0xA3, 0x9E, 0x81, 0xF3, 0xD7, 0xFB,
 	0x7C, 0xE3, 0x39, 0x82, 0x9B, 0x2F, 0xFF, 0x87, 0x34, 0x8E, 0x43, 0x44, 0xC4, 0xDE, 0xE9, 0xCB,
@@ -124,12 +124,12 @@ __device__ const byte INV_SBOX[256] = {
 	0x17, 0x2B, 0x04, 0x7E, 0xBA, 0x77, 0xD6, 0x26, 0xE1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0C, 0x7D
 };
 
- Roundkey array definition. Used on the key expansion step - Called by CPU host - Key Expansion
+// Roundkey array definition. Used on the key expansion step - Called by CPU host - Key Expansion
 const byte Rcon[11] = { 0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36 };
 
- During MixColumns step, the matrix multiplication its done using the following
- tables. By this way, the matrix multiplication needs less computational
- time (but a bit more of RAM)
+/* During MixColumns step, the matrix multiplication its done using the following
+* tables. By this way, the matrix multiplication needs less computational
+* time (but a bit more of RAM)*/
 __device__ const byte GM2[256] = {
 	0x00, 0x02, 0x04, 0x06, 0x08, 0x0a, 0x0c, 0x0e, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e,
 	0x20, 0x22, 0x24, 0x26, 0x28, 0x2a, 0x2c, 0x2e, 0x30, 0x32, 0x34, 0x36, 0x38, 0x3a, 0x3c, 0x3e,
@@ -244,168 +244,168 @@ __device__ const byte GM14[256] = {
 	0xd7, 0xd9, 0xcb, 0xc5, 0xef, 0xe1, 0xf3, 0xfd, 0xa7, 0xa9, 0xbb, 0xb5, 0x9f, 0x91, 0x83, 0x8d
 };
 
-
- GLOBAL VARIABLES 
-
- The cypher operation (ENCRYPT o DECRYPT)
+/********************
+* GLOBAL VARIABLES *
+********************/
+// The cypher operation (ENCRYPT o DECRYPT)
 int CYPHER_OP;
- The data buffer which stores the data to process
+// The data buffer which stores the data to process
 byte Buffer[MAX_BUFFER_LENGTH];
 
- Expanded key array definition. Its length depends on the round numbers - Called by CPU Host - KeyExpansion
+// Expanded key array definition. Its length depends on the round numbers - Called by CPU Host - KeyExpansion
 byte ExpandKey[44][4];
- Key array
+// Key array
 byte Key[32];
- State matrix which will store the data on each AES round
+// State matrix which will store the data on each AES round
 byte State[4][4];
 
+/*********************
+* UTILITY FUNCTIONS *
+*********************/
 
- UTILITY FUNCTIONS 
-
-
-
- Prints a State matrix to the terminal.
-
- @param state The state matrix to print.
-
+/**
+* Prints a State matrix to the terminal.
+*
+* @param state The state matrix to print.
+*/
 void PrintStateMatrix(byte state[4][4]) {
 	int i;
-	for (i = 0; i  4; ++i) {
-		printf(%02x %02x %02x %02xn, state[i][0], state[i][1], state[i][2], state[i][3]);
+	for (i = 0; i < 4; ++i) {
+		printf("%02x %02x %02x %02x\n", state[i][0], state[i][1], state[i][2], state[i][3]);
 	}
-	printf(n);
+	printf("\n");
 }
 
-
- Rotate a given word.
-
- @param wordToRotate The word we want to rotate.
- @param positions The number of positions to rotate.
- @param operation If the rotation is left (ENCRYPT) or right (DECRYPT).
-
-void RotateWord(byte wordToRotate, byte positions, byte operation) {
-	 The word rotation uses an auxiliar array
+/**
+* Rotate a given word.
+*
+* @param wordToRotate The word we want to rotate.
+* @param positions The number of positions to rotate.
+* @param operation If the rotation is left (ENCRYPT) or right (DECRYPT).
+*/
+void RotateWord(byte* wordToRotate, byte positions, byte operation) {
+	// The word rotation uses an auxiliar array
 	byte origWord[4] = { wordToRotate[0], wordToRotate[1], wordToRotate[2], wordToRotate[3] };
 	int word_it, origWord_it;
 
-	 Word rotation algorithm. The way the word is rotated depends on
-	 the cypher operation.
-	for (word_it = 0; word_it  4; word_it++) {
+	// Word rotation algorithm. The way the word is rotated depends on
+	// the cypher operation.
+	for (word_it = 0; word_it < 4; word_it++) {
 		if (operation == ENCRYPT) {
-			 Rotating to the left
+			// Rotating to the left
 			wordToRotate[word_it] = origWord[(word_it + positions) % 4];
 		}
 		else {
-			 Rotation to the right
-			origWord_it = ((word_it + positions  (-1)) % 4);
-			wordToRotate[word_it] = origWord[(origWord_it  0)  origWord_it + 4  origWord_it];
+			// Rotation to the right
+			origWord_it = ((word_it + positions * (-1)) % 4);
+			wordToRotate[word_it] = origWord[(origWord_it < 0) ? origWord_it + 4 : origWord_it];
 		}
 	}
 }
 
-
- Rotate a given word on the GPGPU.
-
- @param wordToRotate The word we want to rotate.
- @param positions The number of positions to rotate.
- @param operation If the rotation is left (ENCRYPT) or right (DECRYPT).
-
-__device__ void CUDARotateWord(byte w, byte n, byte inv) {
-	 Copy the word array (4 byte_
+/**
+* Rotate a given word on the GPGPU.
+*
+* @param wordToRotate The word we want to rotate.
+* @param positions The number of positions to rotate.
+* @param operation If the rotation is left (ENCRYPT) or right (DECRYPT).
+*/
+__device__ void CUDARotateWord(byte* w, byte n, byte inv) {
+	// Copy the word array (4 byte_
 	byte tmp[4] = { w[0], w[1], w[2], w[3] };
 	int w_it, tmp_it;
 
-	 Rotate array by n bytes
-	for (w_it = 0; w_it  4; w_it++) {
+	// Rotate array by n bytes
+	for (w_it = 0; w_it < 4; w_it++) {
 		if (!inv) {
 			w[w_it] = tmp[(w_it + n) % 4];
 		}
 		else {
-			tmp_it = ((w_it + n  (-1)) % 4);
-			w[w_it] = tmp[(tmp_it  0)  tmp_it + 4  tmp_it];
+			tmp_it = ((w_it + n * (-1)) % 4);
+			w[w_it] = tmp[(tmp_it < 0) ? tmp_it + 4 : tmp_it];
 		}
 	}
 }
 
-
- Read a file and stores the data into the data buffer.
- @param inFile The file to read (already opened).
- @return  The number of bytes read
-
-int LoadDataBuffer(FILE inputFile) {
-	 Try to read the buffer size
+/**
+* Read a file and stores the data into the data buffer.
+* @param inFile The file to read (already opened).
+* @return  The number of bytes read
+*/
+int LoadDataBuffer(FILE* inputFile) {
+	// Try to read the buffer size
 	int bytesRead = fread(Buffer, 1, MAX_BUFFER_LENGTH, inputFile);
 
-	printf(Loading the input file...r);
+	printf("Loading the input file...\r");
 	fflush(stdout);
 
-	if (bytesRead  0) {
-		printf(Buffer loaded (%d KB read)                                 n, bytesRead  1024);
+	if (bytesRead > 0) {
+		printf("Buffer loaded (%d KB read)                                 \n", bytesRead / 1024);
 	}
 	else {
-		printf(Buffer not loaded, empty file                                      n);
+		printf("Buffer not loaded, empty file?                                      \n");
 	}
 
 	return bytesRead;
 }
 
-
- Read a file and stores the data into the data buffer.
- @param outBuffer The buffer to write
- @param nStatesInBuffer The amount of state matrix inside the buffer
- @param outFile File pointer to the output file
- @param inv Operation code
- @return  The number of bytes written
-
-int WriteBuffer(byte outBuffer[], int nStatesInBuffer, FILE  outFile, byte inv) {
-	int nPaddingBytes = 0, lastByte = (nStatesInBuffer - 1)  16 + 15, bytesWritten;
-	 Get the last byte from the data
+/**
+* Read a file and stores the data into the data buffer.
+* @param outBuffer The buffer to write
+* @param nStatesInBuffer The amount of state matrix inside the buffer
+* @param outFile File pointer to the output file
+* @param inv Operation code
+* @return  The number of bytes written
+*/
+int WriteBuffer(byte outBuffer[], int nStatesInBuffer, FILE * outFile, byte inv) {
+	int nPaddingBytes = 0, lastByte = (nStatesInBuffer - 1) * 16 + 15, bytesWritten;
+	// Get the last byte from the data
 	byte byte_padding = outBuffer[lastByte];
 
-	 Check the last bytes to detect the number of padding bytes on the buffer.
-	 This operation its only done while DECRYPT, and repeated value means its
-	 a padding byte.
-	for (; inv == DECRYPT && lastByte  0 && byte_padding == outBuffer[lastByte]; lastByte--) {
+	/* Check the last bytes to detect the number of padding bytes on the buffer.
+	* This operation its only done while DECRYPT, and repeated value means its
+	* a padding byte.*/
+	for (; inv == DECRYPT && lastByte > 0 && byte_padding == outBuffer[lastByte]; lastByte--) {
 		nPaddingBytes++;
 	}
 
-	if (nPaddingBytes  1) printf(Detected %d padding bytesn, nPaddingBytes);
+	if (nPaddingBytes > 1) printf("Detected %d padding bytes\n", nPaddingBytes);
 
-	printf(Writing data from buffer into the output file...n);
+	printf("Writing data from buffer into the output file...\n");
 	fflush(stdout);
 
-	int bytesToWrite = (nPaddingBytes  1 && nPaddingBytes = 15)  nStatesInBuffer  16 - nPaddingBytes  nStatesInBuffer  16;
+	int bytesToWrite = (nPaddingBytes > 1 && nPaddingBytes <= 15) ? nStatesInBuffer * 16 - nPaddingBytes : nStatesInBuffer * 16;
 	bytesWritten = fwrite(outBuffer, 1, bytesToWrite, outFile);
-	if (bytesWritten  0) {
-		printf(Bytes written (%d KB)                           nn, bytesWritten  1024);
+	if (bytesWritten > 0) {
+		printf("Bytes written (%d KB)                           \n\n", bytesWritten / 1024);
 	}
 	else {
-		printf(Nothing has been written on the output file  nn);
+		printf("Nothing has been written on the output file  \n\n");
 	}
 	return bytesWritten;
 }
 
-
- Read the key from the file.
- @param Key Array to store the key.
- @param KeyFile The file where the key is stored.
- @return The key length
-
-int ReadKey(byte Key[], FILE  KeyFile) {
+/**
+* Read the key from the file.
+* @param Key Array to store the key.
+* @param KeyFile The file where the key is stored.
+* @return The key length
+*/
+int ReadKey(byte Key[], FILE * KeyFile) {
 	int key_it = fread(Key, 1, 32, KeyFile);
 	fclose(KeyFile);
 	return key_it;
 }
 
-
- Prints an error and exits.
- @param inFile The file to process.
- @param outFile The output file
- @param oFilename The output filename
-
-void EndWithError(FILE inFile, FILE outFile, char oFilename) {
-	printf(nError raised, the program finishes nown);
-	 Close the files, remove the output file and exit
+/**
+* Prints an error and exits.
+* @param inFile The file to process.
+* @param outFile The output file
+* @param oFilename The output filename
+*/
+void EndWithError(FILE* inFile, FILE* outFile, char* oFilename) {
+	printf("\nError raised, the program finishes now\n");
+	// Close the files, remove the output file and exit
 	fclose(inFile);
 	fclose(outFile);
 	remove(oFilename);
@@ -413,205 +413,205 @@ void EndWithError(FILE inFile, FILE outFile, char oFilename) {
 	exit(EXIT_SUCCESS);
 }
 
-
- Key expansion function. Implements httpsen.wikipedia.orgwikiRijndael_key_schedule
-
- @param Key The key buffer array.
-
-void KeyExpansion(byte  Key) {
+/**
+* Key expansion function. Implements: https://en.wikipedia.org/wiki/Rijndael_key_schedule
+*
+* @param Key The key buffer array.
+*/
+void KeyExpansion(byte * Key) {
 	byte temp[4];
 	int word_it;
 
-	 Copy the first N bytes from the original key.
-	 16 for 128-bit keys, 24 for 192-bit keys, and 32 for 256-bit keys
-	memcpy(ExpandKey, Key, KEY_SIZE  KEY_EXP);
+	/* Copy the first N bytes from the original key.
+	* 16 for 128-bit keys, 24 for 192-bit keys, and 32 for 256-bit keys*/
+	memcpy(ExpandKey, Key, KEY_SIZE / KEY_EXP);
 
-	 Calculate the rest of the words for the expanded key
-	for (int Round_it = KEY_EXP; Round_it  (ROUNDS + 1)  4; Round_it++) {
-		 Get the last created word
+	/* Calculate the rest of the words for the expanded key*/
+	for (int Round_it = KEY_EXP; Round_it < (ROUNDS + 1) * 4; Round_it++) {
+		// Get the last created word
 		memcpy(temp, ExpandKey[Round_it - 1], 4);
 		if (Round_it % KEY_EXP == 0) {
-			 Each 8 words, rotate the word and apply the SBOX 
+			/* Each 8 words, rotate the word and apply the SBOX */
 			RotateWord(temp, 1, ENCRYPT);
-			for (word_it = 0; word_it  4; ++word_it)
-				temp[word_it] = H_SBOX[(((temp[word_it] & 0xf0)  4)  16) + (temp[word_it] & 0x0f)];
-			XOR of the first element with the corresponding RCON value 
-			temp[0] ^= Rcon[Round_it  KEY_EXP];
+			for (word_it = 0; word_it < 4; ++word_it)
+				temp[word_it] = H_SBOX[(((temp[word_it] & 0xf0) >> 4) * 16) + (temp[word_it] & 0x0f)];
+			/*XOR of the first element with the corresponding RCON value */
+			temp[0] ^= Rcon[Round_it / KEY_EXP];
 		}
-		 For all the words, aply an XOR with the block N bytes before the current one 
-		for (word_it = 0; word_it  4; word_it++)
+		/* For all the words, aply an XOR with the block N bytes before the current one */
+		for (word_it = 0; word_it < 4; word_it++)
 			temp[word_it] ^= ExpandKey[Round_it - KEY_EXP][word_it];
-		 Store the new word on th expanded key
+		// Store the new word on th expanded key
 		memcpy(ExpandKey[Round_it], temp, 4);
 	}
 }
 
-
- AES initialization function.
- @param op The operation character the user introduced on the program execution command. 'e' for encrypt and 'd' for decrypt.
- @param inputFile The file to get the data from.
- @param outputFile The file to put the processed data on.
- @param keyFile The file with the key value.
- @param inputFilename The filename of the input file.
- @param outputFilename The filename of the output file.
- @param keyFilename The filename of the key file.
-
-void initAES(char op, FILE inputFile,
-	FILE outputFile, FILE keyFile, char inputFilename,
-	char outputFilename, char keyFilename) {
+/**
+* AES initialization function.
+* @param op The operation character the user introduced on the program execution command. 'e' for encrypt and 'd' for decrypt.
+* @param inputFile The file to get the data from.
+* @param outputFile The file to put the processed data on.
+* @param keyFile The file with the key value.
+* @param inputFilename The filename of the input file.
+* @param outputFilename The filename of the output file.
+* @param keyFilename The filename of the key file.
+*/
+void initAES(char* op, FILE** inputFile,
+	FILE** outputFile, FILE* keyFile, char* inputFilename,
+	char* outputFilename, char* keyFilename) {
 
 	int expkey_it, klong = 0;
 
-	 Check the operation value 
-	if (op != 'd' && op != 'e') {
-		printf(Unknown operationn);
+	/* Check the operation value */
+	if (*op != 'd' && *op != 'e') {
+		printf("Unknown operation\n");
 		Pause();
 		exit(EXIT_SUCCESS);
 	}
 	else {
-		 If the value is correct, set the operation 
-		CYPHER_OP = (op == 'd');
+		/* If the value is correct, set the operation */
+		CYPHER_OP = (*op == 'd');
 	}
 
-	 Files initialization
-	printf(nOpening files...n);
-	keyFile = fopen(keyFilename, rb);
-	inputFile = fopen(inputFilename, rb);
+	/* Files initialization*/
+	printf("\nOpening files...\n");
+	keyFile = fopen(keyFilename, "rb");
+	*inputFile = fopen(inputFilename, "rb");
 	if (keyFile == NULL) {
-		printf(Error opening file %s for key reading n, keyFilename);
+		printf("Error opening file \"%s\" for key reading \n", keyFilename);
 		Pause();
 		exit(EXIT_SUCCESS);
 	}
 	else {
-		printf(File %s opened successfully for key readingn, keyFilename);
+		printf("File \"%s\" opened successfully for key reading\n", keyFilename);
 	}
-	if (inputFile == NULL) {
-		printf(Error opening the input file %sn, inputFilename);
+	if (*inputFile == NULL) {
+		printf("Error opening the input file \"%s\"\n", inputFilename);
 		Pause();
 		exit(EXIT_SUCCESS);
 	}
 	else {
-		printf(Input file %s opened successfullyn, inputFilename);
+		printf("Input file \"%s\" opened successfully\n", inputFilename);
 	}
 
-	Create the output file. If the name given is the same as the input, add a suffix.
+	/*Create the output file. If the name given is the same as the input, add a suffix.*/
 	if (strcmp(inputFilename, outputFilename) == 0) {
-		printf(Output file name must be different, adding suffixn %s.outn, outputFilename);
-		outputFile = fopen(strcat(outputFilename, .out), wb);
+		printf("Output file name must be different, adding suffix\n: \"%s.out\"\n", outputFilename);
+		*outputFile = fopen(strcat(outputFilename, ".out"), "wb");
 	}
 	else {
-		outputFile = fopen(outputFilename, wb);
+		*outputFile = fopen(outputFilename, "wb");
 	}
 	if (outputFile == NULL) {
-		printf(Error creating the output filen);
-		fclose(inputFile);
+		printf("Error creating the output file\n");
+		fclose(*inputFile);
 		fclose(keyFile);
 		exit(EXIT_SUCCESS);
 	}
 	else {
-		printf(Output file %s created and opened successfullyn, outputFilename);
+		printf("Output file \"%s\" created and opened successfully\n", outputFilename);
 	}
-	Key reading
-	printf(nLeyendo la clave...n);
+	/*Key reading*/
+	printf("\nLeyendo la clave...\n");
 	klong = ReadKey(Key, keyFile);
-	if (klong != KEY_SIZE  8) {
-		printf(Key length expected %d bytes, key length read %d bytesn, KEY_SIZE  8, klong);
-		EndWithError(inputFile, outputFile, outputFilename);
+	if (klong != KEY_SIZE / 8) {
+		printf("Key length expected %d bytes, key length read %d bytes\n", KEY_SIZE / 8, klong);
+		EndWithError(*inputFile, *outputFile, outputFilename);
 	}
-	printf(Key read form the file n);
-	for (expkey_it = 0; expkey_it  KEY_SIZE  8; expkey_it++) {
-		printf(%02x , Key[expkey_it]);
-		if (expkey_it == KEY_SIZE  8 - 1) printf(n);
+	printf("Key read form the file: \n");
+	for (expkey_it = 0; expkey_it < KEY_SIZE / 8; expkey_it++) {
+		printf("%02x ", Key[expkey_it]);
+		if (expkey_it == KEY_SIZE / 8 - 1) printf("\n");
 	}
 
-	Key expansion
-	printf(nExpanding key...n);
+	/*Key expansion*/
+	printf("\nExpanding key...\n");
 	KeyExpansion(Key);
 
-	printf(AES initialized successfullynn);
+	printf("AES initialized successfully\n\n");
 }
 
-void closeAES(FILE in, FILE  out) {
+void closeAES(FILE* in, FILE * out) {
 	fclose(in);
 	fclose(out);
 }
 
-
- AES STEPS IMPLEMENTATION 
- 
-
- AES add round key step implementation.
- @param State The state matrix to process.
- @param round The round number.
-
-__device__ void AddRoundKey(byte State, byte round, byte gpuExpandedKey) {
+/****************************
+* AES STEPS IMPLEMENTATION *
+* *************************/
+/**
+* AES add round key step implementation.
+* @param State The state matrix to process.
+* @param round The round number.
+*/
+__device__ void AddRoundKey(byte *State, byte round, byte* gpuExpandedKey) {
 	int st_f = threadIdx.x;
 	int st_c = threadIdx.y;
 
-	State[4  st_f + st_c] ^= gpuExpandedKey[(round  4 + st_f)  4 + st_c];
+	State[4 * st_f + st_c] ^= gpuExpandedKey[(round * 4 + st_f) * 4 + st_c];
 }
 
-
- AES Substitute bytes step implementation.
-
- @param State The state matrix to process.
- @param operation The operation to process (ENCRYPT or DECRYPT).
-
-__device__ void SubBytes(byte State, byte operation) {
+/**
+* AES Substitute bytes step implementation.
+*
+* @param State The state matrix to process.
+* @param operation The operation to process (ENCRYPT or DECRYPT).
+*/
+__device__ void SubBytes(byte *State, byte operation) {
 	int state_f, state_c, sbox_f, sbox_c;
 
-	TODO only need 4x4 threads but we have 16x16 
+	//TODO only need 4x4 threads but we have 16x16 
 	state_f = threadIdx.x;
 	state_c = threadIdx.y;
 
-	int pos = 4  state_f + state_c;
+	int pos = 4 * state_f + state_c;
 	byte st = State[pos];
 
-	sbox_f = (st & 0xF0)  4;
+	sbox_f = (st & 0xF0) >> 4;
 	sbox_c = st & 0x0F;
 
 	if (operation == ENCRYPT) {
-		State[pos] = SBOX[sbox_f  16 + sbox_c];
+		State[pos] = SBOX[sbox_f * 16 + sbox_c];
 	}
 	else {
-		State[pos] = INV_SBOX[sbox_f  16 + sbox_c];
+		State[pos] = INV_SBOX[sbox_f * 16 + sbox_c];
 	}
 }
 
-
- AES shift rows step.
-
- @param State The state matrix to process.
- @param operation The operation to process (ENCRYPT or DECRYPT).
-
-__device__ void ShiftRows(byte State, byte inversa) {
-	int state_col = threadIdx.y, w_it; = threadIdx.x;
+/**
+* AES shift rows step.
+*
+* @param State The state matrix to process.
+* @param operation The operation to process (ENCRYPT or DECRYPT).
+*/
+__device__ void ShiftRows(byte *State, byte inversa) {
+	int state_col = threadIdx.y, w_it;// = threadIdx.x;
 	byte w[4];
 
-	Run each line the correct # of times
-	Setting w[it] is ran 4 times per row excluding 1st row - 12 threads
-	 CUDARotateWord is ran 1 time per row excluding 1st row - 3 threads
+	//Run each line the correct # of times
+	//Setting w[it] is ran 4 times per row excluding 1st row - 12 threads
+	// CUDARotateWord is ran 1 time per row excluding 1st row - 3 threads
 	if (state_col != 0) {
-		for (w_it = 0; w_it  4; ++w_it) w[w_it] = State[4  w_it + state_col];
+		for (w_it = 0; w_it < 4; ++w_it) w[w_it] = State[4 * w_it + state_col];
 		CUDARotateWord(w, state_col, inversa);
-		for (w_it = 0; w_it  4; ++w_it) State[4  w_it + state_col] = w[w_it];
+		for (w_it = 0; w_it < 4; ++w_it) State[4 * w_it + state_col] = w[w_it];
 	}
 }
 
-
- AES mix columns step.
-
- @param State The state matrix to process.
- @param operation The operation to process (ENCRYPT or DECRYPT).
-
-__device__ void MixColumns(byte State, byte operation) {
+/**
+* AES mix columns step.
+*
+* @param State The state matrix to process.
+* @param operation The operation to process (ENCRYPT or DECRYPT).
+*/
+__device__ void MixColumns(byte *State, byte operation) {
 	int row = threadIdx.x, col = threadIdx.y;
-	int pos = 4  row;
-	Each thread calculates one byte in the 4x4 byte matrix
+	int pos = 4 * row;
+	//Each thread calculates one byte in the 4x4 byte matrix
 	byte tmp;
 
 	switch (operation) {
-	case ENCRYPT
+	case ENCRYPT:
 		if (col == 0)
 			tmp = GM2[State[pos]] ^ GM3[State[pos + 1]] ^ State[pos + 2] ^ State[pos + 3];
 		else if (col == 1)
@@ -624,7 +624,7 @@ __device__ void MixColumns(byte State, byte operation) {
 		State[pos + col] = tmp;
 
 		break;
-	case DECRYPT
+	case DECRYPT:
 		if (col == 0)
 			tmp = GM14[State[pos]] ^ GM11[State[pos + 1]] ^ GM13[State[pos + 2]] ^ GM9[State[pos + 3]];
 		else if (col == 1)
@@ -637,26 +637,26 @@ __device__ void MixColumns(byte State, byte operation) {
 		State[pos + col] = tmp;
 
 		break;
-	default
+	default:
 		break;
 	};
 }
 
-
- Function that executes the AES algorithm on a state matrix.
-
- @param State The state matrix to process.
- @param operation The operation to process (ENCRYPT or DECRYPT).
-
-__global__ void executeAES(byte State, byte operation, byte ExpandKey_gpu) {
+/**
+* Function that executes the AES algorithm on a state matrix.
+*
+* @param State The state matrix to process.
+* @param operation The operation to process (ENCRYPT or DECRYPT).
+*/
+__global__ void executeAES(byte *State, byte operation, byte* ExpandKey_gpu) {
 	int round_it;
 
 	if (operation == DECRYPT) {
 		AddRoundKey(State, 14, ExpandKey_gpu);
 		ShiftRows(State, DECRYPT);
 		SubBytes(State, DECRYPT);
-		#pragma unroll
-		for (round_it = ROUNDS - 1; round_it  0; round_it--) {
+		//#pragma unroll
+		for (round_it = ROUNDS - 1; round_it > 0; round_it--) {
 			AddRoundKey(State, round_it, ExpandKey_gpu);
 			MixColumns(State, DECRYPT);
 			ShiftRows(State, DECRYPT);
@@ -666,8 +666,8 @@ __global__ void executeAES(byte State, byte operation, byte ExpandKey_gpu) {
 	}
 	else {
 		AddRoundKey(State, 0, ExpandKey_gpu);
-		#pragma unroll
-		for (round_it = 1; round_it  ROUNDS; round_it++) {
+		//#pragma unroll
+		for (round_it = 1; round_it < ROUNDS; round_it++) {
 			SubBytes(State, ENCRYPT);
 			ShiftRows(State, ENCRYPT);
 			MixColumns(State, ENCRYPT);
@@ -679,34 +679,34 @@ __global__ void executeAES(byte State, byte operation, byte ExpandKey_gpu) {
 	}
 }
 
-int main(int argc, char argv) {
+int main(int argc, char** argv) {
 
-	 Iterators 
+	/* Iterators */
 	int bytesRead, bytesWritten;
 	unsigned long states_it = 0L;
 
-	 Number of state matrix stored on the buffer
+	/* Number of state matrix stored on the buffer*/
 	unsigned long nStatesInBuffer = 0L;
 
-	 Counters for metrics 
+	/* Counters for metrics */
 	int hdd_cont = 0;
 	unsigned long processedBytes = 0L;
 
-	 File pointers 
-	FILE inFile, outFile, keyFile = NULL;
+	/* File pointers */
+	FILE *inFile, *outFile, *keyFile = NULL;
 
-	 Pointer to the Key Buffer passed to GPU
-	byte gpuExpKeyBuffer;
+	// Pointer to the Key Buffer passed to GPU
+	byte *gpuExpKeyBuffer;
 
-	 CUDA error variable
+	// CUDA error variable/
 	cudaError_t cuda_error;
 
-	 Clock variables to show the time elapsed
+	// Clock variables to show the time elapsed
 	cudaEvent_t start, stop;
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 
-	 Create the streams
+	// Create the streams
 	cudaStream_t stream0, stream1, stream2, stream3, stream4, stream5, stream6, stream7;
 	cudaStreamCreate(&stream0);
 	cudaStreamCreate(&stream1);
@@ -720,127 +720,127 @@ int main(int argc, char argv) {
 	if (argc == 5) {
 		initAES(argv[1], &inFile, &outFile, keyFile, argv[2], argv[3], argv[4]);
 
-		 Memory allocation on the CUDA device to store the expanded key buffers
-		cuda_error = cudaMalloc((void)&gpuExpKeyBuffer, sizeof(byte)  KEY_EXP);
+		// Memory allocation on the CUDA device to store the expanded key buffers
+		cuda_error = cudaMalloc((void**)&gpuExpKeyBuffer, sizeof(byte) * KEY_EXP);
 
-		 Copy the expanded key to the CUDA device memory
-		cuda_error = cudaMemcpy(gpuExpKeyBuffer, ExpandKey, sizeof(byte)  KEY_EXP, cudaMemcpyHostToDevice);
+		// Copy the expanded key to the CUDA device memory
+		cuda_error = cudaMemcpy(gpuExpKeyBuffer, ExpandKey, sizeof(byte) * KEY_EXP, cudaMemcpyHostToDevice);
 		if (cuda_error != cudaSuccess) {
-			printf(Error copying the expanded key to the CUDA devicen);
+			printf("Error copying the expanded key to the CUDA device\n");
 			EndWithError(inFile, outFile, argv[3]);
 		}
 		else {
-			printf(Expanded key successfully copied to the GPU memorynn);
+			printf("Expanded key successfully copied to the GPU memory\n\n");
 		}
 
 
-		 Load from the file and process it
+		/* Load from the file and process it*/
 		while (bytesRead = LoadDataBuffer(inFile)) {
-			printf(Processing data from buffer                                   r);
+			printf("Processing data from buffer                                   \r");
 			fflush(stdout);
 
 			hdd_cont++;
 
-			 Update the number of state matrix on the buffer
-			nStatesInBuffer = bytesRead  16;
+			/* Update the number of state matrix on the buffer*/
+			nStatesInBuffer = bytesRead / 16;
 			if (bytesRead % 16 != 0) {
-				 If the number of bytes read is not divisible by 16, insert
-				the rest of the bytes and add padding bytes.
+				/* If the number of bytes read is not divisible by 16, insert
+				the rest of the bytes and add padding bytes.*/
 				nStatesInBuffer++;
-				memset(Buffer + bytesRead, ((nStatesInBuffer  16) - bytesRead), ((nStatesInBuffer  16) - bytesRead));
+				memset(Buffer + bytesRead, ((nStatesInBuffer * 16) - bytesRead), ((nStatesInBuffer * 16) - bytesRead));
 			}
 
-			 Start timing 
+			/* Start timing */
 			cudaEventRecord(start);
 
-			byte d_state0 = NULL;
-			byte d_state1 = NULL;
-			byte d_state2 = NULL;
-			byte d_state3 = NULL;
-			byte d_state4 = NULL;
-			byte d_state5 = NULL;
-			byte d_state6 = NULL;
-			byte d_state7 = NULL;
-			cudaMalloc((void )&d_state0, 4  4);
-			cudaMalloc((void )&d_state1, 4  4);
-			cudaMalloc((void )&d_state2, 4  4);
-			cudaMalloc((void )&d_state3, 4  4);
-			cudaMalloc((void )&d_state4, 4  4);
-			cudaMalloc((void )&d_state5, 4  4);
-			cudaMalloc((void )&d_state6, 4  4);
-			cudaMalloc((void )&d_state7, 4  4);
+			byte *d_state0 = NULL;
+			byte *d_state1 = NULL;
+			byte *d_state2 = NULL;
+			byte *d_state3 = NULL;
+			byte *d_state4 = NULL;
+			byte *d_state5 = NULL;
+			byte *d_state6 = NULL;
+			byte *d_state7 = NULL;
+			cudaMalloc((void **)&d_state0, 4 * 4);
+			cudaMalloc((void **)&d_state1, 4 * 4);
+			cudaMalloc((void **)&d_state2, 4 * 4);
+			cudaMalloc((void **)&d_state3, 4 * 4);
+			cudaMalloc((void **)&d_state4, 4 * 4);
+			cudaMalloc((void **)&d_state5, 4 * 4);
+			cudaMalloc((void **)&d_state6, 4 * 4);
+			cudaMalloc((void **)&d_state7, 4 * 4);
 
-			 Process every state matrix from the buffer 
-			for (states_it = 0; states_it  nStatesInBuffer; states_it+= 8) {
-				 Init current state matrix
-				memcpy(State, Buffer + states_it  16, 16);
-				cudaMemcpyAsync(d_state0, Buffer + states_it  16, 16, cudaMemcpyHostToDevice, stream0);
-				cudaMemcpyAsync(d_state1, Buffer + (states_it + 1)  16, 16, cudaMemcpyHostToDevice, stream1);
-				cudaMemcpyAsync(d_state2, Buffer + (states_it + 2)  16, 16, cudaMemcpyHostToDevice, stream2);
-				cudaMemcpyAsync(d_state3, Buffer + (states_it + 3)  16, 16, cudaMemcpyHostToDevice, stream3);
-				cudaMemcpyAsync(d_state1, Buffer + (states_it + 4)  16, 16, cudaMemcpyHostToDevice, stream4);
-				cudaMemcpyAsync(d_state2, Buffer + (states_it + 5)  16, 16, cudaMemcpyHostToDevice, stream5);
-				cudaMemcpyAsync(d_state3, Buffer + (states_it + 6)  16, 16, cudaMemcpyHostToDevice, stream6);
-				cudaMemcpyAsync(d_state1, Buffer + (states_it + 7)  16, 16, cudaMemcpyHostToDevice, stream7);
+			/* Process every state matrix from the buffer */
+			for (states_it = 0; states_it < nStatesInBuffer; states_it+= 8) {
+				// Init current state matrix
+				//memcpy(State, Buffer + states_it * 16, 16);
+				cudaMemcpyAsync(d_state0, Buffer + states_it * 16, 16, cudaMemcpyHostToDevice, stream0);
+				cudaMemcpyAsync(d_state1, Buffer + (states_it + 1) * 16, 16, cudaMemcpyHostToDevice, stream1);
+				cudaMemcpyAsync(d_state2, Buffer + (states_it + 2) * 16, 16, cudaMemcpyHostToDevice, stream2);
+				cudaMemcpyAsync(d_state3, Buffer + (states_it + 3) * 16, 16, cudaMemcpyHostToDevice, stream3);
+				cudaMemcpyAsync(d_state1, Buffer + (states_it + 4) * 16, 16, cudaMemcpyHostToDevice, stream4);
+				cudaMemcpyAsync(d_state2, Buffer + (states_it + 5) * 16, 16, cudaMemcpyHostToDevice, stream5);
+				cudaMemcpyAsync(d_state3, Buffer + (states_it + 6) * 16, 16, cudaMemcpyHostToDevice, stream6);
+				cudaMemcpyAsync(d_state1, Buffer + (states_it + 7) * 16, 16, cudaMemcpyHostToDevice, stream7);
 
-				 AES execution
+				// AES execution
 				dim3 block(4, 4);
-				executeAES  1, block, 0, stream0  (d_state0, CYPHER_OP, gpuExpKeyBuffer);
-				executeAES  1, block, 0, stream1  (d_state1, CYPHER_OP, gpuExpKeyBuffer);
-				executeAES  1, block, 0, stream2  (d_state2, CYPHER_OP, gpuExpKeyBuffer);
-				executeAES  1, block, 0, stream3  (d_state3, CYPHER_OP, gpuExpKeyBuffer);
-				executeAES  1, block, 0, stream4  (d_state4, CYPHER_OP, gpuExpKeyBuffer);
-				executeAES  1, block, 0, stream5  (d_state5, CYPHER_OP, gpuExpKeyBuffer);
-				executeAES  1, block, 0, stream6  (d_state6, CYPHER_OP, gpuExpKeyBuffer);
-				executeAES  1, block, 0, stream7  (d_state7, CYPHER_OP, gpuExpKeyBuffer);
+				executeAES << <1, block, 0, stream0 >> >(d_state0, CYPHER_OP, gpuExpKeyBuffer);
+				executeAES << <1, block, 0, stream1 >> >(d_state1, CYPHER_OP, gpuExpKeyBuffer);
+				executeAES << <1, block, 0, stream2 >> >(d_state2, CYPHER_OP, gpuExpKeyBuffer);
+				executeAES << <1, block, 0, stream3 >> >(d_state3, CYPHER_OP, gpuExpKeyBuffer);
+				executeAES << <1, block, 0, stream4 >> >(d_state4, CYPHER_OP, gpuExpKeyBuffer);
+				executeAES << <1, block, 0, stream5 >> >(d_state5, CYPHER_OP, gpuExpKeyBuffer);
+				executeAES << <1, block, 0, stream6 >> >(d_state6, CYPHER_OP, gpuExpKeyBuffer);
+				executeAES << <1, block, 0, stream7 >> >(d_state7, CYPHER_OP, gpuExpKeyBuffer);
 
 
-				cudaMemcpyAsync((Buffer + states_it  16), d_state0, 16, cudaMemcpyDeviceToHost, stream0);
-				cudaMemcpyAsync((Buffer + (states_it + 1)  16), d_state1, 16, cudaMemcpyDeviceToHost, stream1);
-				cudaMemcpyAsync((Buffer + (states_it + 2)  16), d_state2, 16, cudaMemcpyDeviceToHost, stream2);
-				cudaMemcpyAsync((Buffer + (states_it + 3)  16), d_state3, 16, cudaMemcpyDeviceToHost, stream3);
-				cudaMemcpyAsync((Buffer + (states_it + 4)  16), d_state3, 16, cudaMemcpyDeviceToHost, stream4);
-				cudaMemcpyAsync((Buffer + (states_it + 5)  16), d_state1, 16, cudaMemcpyDeviceToHost, stream5);
-				cudaMemcpyAsync((Buffer + (states_it + 6)  16), d_state2, 16, cudaMemcpyDeviceToHost, stream6);
-				cudaMemcpyAsync((Buffer + (states_it + 7)  16), d_state3, 16, cudaMemcpyDeviceToHost, stream7);
-				 Replace the original data on the buffer with the result.
-				memcpy(Buffer + states_it  16, State, 16);
+				cudaMemcpyAsync((Buffer + states_it * 16), d_state0, 16, cudaMemcpyDeviceToHost, stream0);
+				cudaMemcpyAsync((Buffer + (states_it + 1) * 16), d_state1, 16, cudaMemcpyDeviceToHost, stream1);
+				cudaMemcpyAsync((Buffer + (states_it + 2) * 16), d_state2, 16, cudaMemcpyDeviceToHost, stream2);
+				cudaMemcpyAsync((Buffer + (states_it + 3) * 16), d_state3, 16, cudaMemcpyDeviceToHost, stream3);
+				cudaMemcpyAsync((Buffer + (states_it + 4) * 16), d_state3, 16, cudaMemcpyDeviceToHost, stream4);
+				cudaMemcpyAsync((Buffer + (states_it + 5) * 16), d_state1, 16, cudaMemcpyDeviceToHost, stream5);
+				cudaMemcpyAsync((Buffer + (states_it + 6) * 16), d_state2, 16, cudaMemcpyDeviceToHost, stream6);
+				cudaMemcpyAsync((Buffer + (states_it + 7) * 16), d_state3, 16, cudaMemcpyDeviceToHost, stream7);
+				// Replace the original data on the buffer with the result.
+				//memcpy(Buffer + states_it * 16, State, 16);
 				if (states_it % 5000 == 0) {
-					printf(Processed %lu%% from the buffer       r, (states_it + 1)  100  nStatesInBuffer);
+					printf("Processed %lu%% from the buffer       \r", (states_it + 1) * 100 / nStatesInBuffer);
 				}
 			}
 
-			 Write the buffer to the output file
-			bytesWritten = WriteBuffer(Buffer, nStatesInBuffer, outFile, (argv[1] == 'd')  DECRYPT  ENCRYPT);
-			if (bytesWritten  nStatesInBuffer) {
-				printf(Error writing the buffer on the output file!!n);
+			// Write the buffer to the output file
+			bytesWritten = WriteBuffer(Buffer, nStatesInBuffer, outFile, (*argv[1] == 'd') ? DECRYPT : ENCRYPT);
+			if (bytesWritten < nStatesInBuffer) {
+				printf("Error writing the buffer on the output file!!\n");
 				EndWithError(inFile, outFile, argv[3]);
 			}
 
 			hdd_cont++;
 
-			 Update the number of bytes processed
+			// Update the number of bytes processed
 			processedBytes += bytesRead;
 		}
 		cudaEventRecord(stop);
 
 		cuda_error = cudaFree(gpuExpKeyBuffer);
 		if (cuda_error != cudaSuccess) {
-			printf(Error freeing the CUDA device's memoryn);
+			printf("Error freeing the CUDA device's memory\n");
 			EndWithError(inFile, outFile, argv[3]);
 		}
 
 		closeAES(inFile, outFile);
-		printf(nnPROCESS FINISHED!!n);
-		printf(Processed %lu bytes nHDD IO operations %d IOsn, processedBytes, hdd_cont);
+		printf("\n\nPROCESS FINISHED!!\n");
+		printf("Processed: %lu bytes \nHDD I/O operations: %d I/Os\n", processedBytes, hdd_cont);
 		float ms = 0;
 		cudaEventElapsedTime(&ms, start, stop);
-		printf(Non-optimized AES time elapsed for %s %.2f msn, argv[1] == 'd'  decryption  encryption, ms);
+		printf("Non-optimized AES time elapsed for %s: %.2f ms\n", *argv[1] == 'd' ? "decryption" : "encryption", ms);
 
 		Pause();
 		return (EXIT_SUCCESS);
 	}
 	else {
-		printf(Execution command '$.AES operation input_file output_file key_file'n);
+		printf("Execution command: '$>./AES <operation> <input_file> <output_file> <key_file>'\n");
 	}
 }
