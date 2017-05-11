@@ -56,6 +56,8 @@ along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
 #define NUM_STATE_BUFFER 33553920
 // So define the data buffer length as the max number of matrix times its size
 #define MAX_BUFFER_LENGTH STATE_SIZE*NUM_STATE_BUFFER
+#define NUM_BLOCKS 256
+#define BLOCK_SIZE STATE_SIZE*NUM_BLOCKS
 
 typedef unsigned char byte;
 
@@ -256,8 +258,6 @@ byte Buffer[MAX_BUFFER_LENGTH];
 byte ExpandKey[44][4];
 // Key array
 byte Key[32];
-// State matrix which will store the data on each AES round
-byte State[4][4];
 
 /*********************
 * UTILITY FUNCTIONS *
@@ -648,9 +648,20 @@ __device__ void MixColumns(byte *State, byte operation) {
 * @param State The state matrix to process.
 * @param operation The operation to process (ENCRYPT or DECRYPT).
 */
-__global__ void executeAES(byte *State, byte operation, byte* ExpandKey_gpu) {
+__global__ void executeAES(byte *StateBuffer, byte operation, byte* ExpandKey_gpu) {
+	__shared__ byte State[16];
 	int round_it;
 
+	int thread_base = blockIdx.x * blockDim.x * blockDim.y; //Dimx = 4, Dimy = 4 Blockidx = 0-31
+	int thread_pos = threadIdx.x * 4 + threadIdx.y; //Tix = 0-3, Tiy = 0-3
+
+
+	//Transfer State buffer block to each local kernel 4x4 State
+	State[thread_pos] = StateBuffer[thread_base + thread_pos];
+	__syncthreads();
+	//printf("Tbase = %d, Tpos = %d\n", thread_base, thread_pos);
+
+	//Run AES Algorithm
 	if (operation == DECRYPT) {
 		AddRoundKey(State, 14, ExpandKey_gpu);
 		ShiftRows(State, DECRYPT);
@@ -677,6 +688,11 @@ __global__ void executeAES(byte *State, byte operation, byte* ExpandKey_gpu) {
 		ShiftRows(State, ENCRYPT);
 		AddRoundKey(State, round_it, ExpandKey_gpu);
 	}
+
+	//Transfer back to StateBuffer
+	StateBuffer[thread_base + thread_pos] = State[thread_pos];
+	__syncthreads();
+
 }
 
 int main(int argc, char** argv) {
@@ -701,32 +717,38 @@ int main(int argc, char** argv) {
 	// CUDA error variable/
 	cudaError_t cuda_error;
 
+	//Grid Dimensions
+	dim3 grid(NUM_BLOCKS, 1);
+	dim3 block(4, 4);
+
 	// Clock variables to show the time elapsed
 	cudaEvent_t start, stop;
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 
-	// Create the streams
-	//cudaStream_t stream0, stream1, stream2, stream3, stream4, stream5, stream6, stream7;
-	//cudaStreamCreate(&stream0);
-	//cudaStreamCreate(&stream1);
-	//cudaStreamCreate(&stream2);
-	//cudaStreamCreate(&stream3);
-	//cudaStreamCreate(&stream4);
-	//cudaStreamCreate(&stream5);
-	//cudaStreamCreate(&stream6);
-	//cudaStreamCreate(&stream7);
-
-	cudaStream_t streams[16];
-	for (int i = 0; i < 16; i++) {
-		cudaStreamCreate(&streams[i]);
-	}
+	//Create the streams
+	cudaStream_t stream0, stream1, stream2, stream3, stream4, stream5, stream6, stream7;
+	cudaStreamCreate(&stream0);
+	cudaStreamCreate(&stream1);
+	cudaStreamCreate(&stream2);
+	cudaStreamCreate(&stream3);
+	cudaStreamCreate(&stream4);
+	cudaStreamCreate(&stream5);
+	cudaStreamCreate(&stream6);
+	cudaStreamCreate(&stream7);
 
 	if (argc == 5) {
 		initAES(argv[1], &inFile, &outFile, keyFile, argv[2], argv[3], argv[4]);
 
 		// Memory allocation on the CUDA device to store the expanded key buffers
 		cuda_error = cudaMalloc((void**)&gpuExpKeyBuffer, sizeof(byte) * KEY_EXP);
+		if (cuda_error != cudaSuccess) {
+			printf("Error allocating memory on the CUDA device for data and expanded key buffers\n");
+			EndWithError(inFile, outFile, argv[3]);
+		}
+		else {
+			printf("Memory successfully allocated on the CUDA device for the data and expanded key buffers\n");
+		}
 
 		// Copy the expanded key to the CUDA device memory
 		cuda_error = cudaMemcpy(gpuExpKeyBuffer, ExpandKey, sizeof(byte) * KEY_EXP, cudaMemcpyHostToDevice);
@@ -738,6 +760,25 @@ int main(int argc, char** argv) {
 			printf("Expanded key successfully copied to the GPU memory\n\n");
 		}
 
+		byte *d_state0 = NULL;
+		byte *d_state1 = NULL;
+		byte *d_state2 = NULL;
+		byte *d_state3 = NULL;
+		byte *d_state4 = NULL;
+		byte *d_state5 = NULL;
+		byte *d_state6 = NULL;
+		byte *d_state7 = NULL;
+		cudaMalloc((void **)&d_state0, BLOCK_SIZE);
+		cudaMalloc((void **)&d_state1, BLOCK_SIZE);
+		cudaMalloc((void **)&d_state2, BLOCK_SIZE);
+		cudaMalloc((void **)&d_state3, BLOCK_SIZE);
+		cudaMalloc((void **)&d_state4, BLOCK_SIZE);
+		cudaMalloc((void **)&d_state5, BLOCK_SIZE);
+		cudaMalloc((void **)&d_state6, BLOCK_SIZE);
+		cudaMalloc((void **)&d_state7, BLOCK_SIZE);
+
+		/* Start timing */
+		cudaEventRecord(start);
 
 		/* Load from the file and process it*/
 		while (bytesRead = LoadDataBuffer(inFile)) {
@@ -755,80 +796,42 @@ int main(int argc, char** argv) {
 				memset(Buffer + bytesRead, ((nStatesInBuffer * 16) - bytesRead), ((nStatesInBuffer * 16) - bytesRead));
 			}
 
-			/* Start timing */
-			cudaEventRecord(start);
-
-			//byte *d_state0 = NULL;
-			//byte *d_state1 = NULL;
-			//byte *d_state2 = NULL;
-			//byte *d_state3 = NULL;
-			//byte *d_state4 = NULL;
-			//byte *d_state5 = NULL;
-			//byte *d_state6 = NULL;
-			//byte *d_state7 = NULL;
-			//cudaMalloc((void **)&d_state0, 4 * 4);
-			//cudaMalloc((void **)&d_state1, 4 * 4);
-			//cudaMalloc((void **)&d_state2, 4 * 4);
-			//cudaMalloc((void **)&d_state3, 4 * 4);
-			//cudaMalloc((void **)&d_state4, 4 * 4);
-			//cudaMalloc((void **)&d_state5, 4 * 4);
-			//cudaMalloc((void **)&d_state6, 4 * 4);
-			//cudaMalloc((void **)&d_state7, 4 * 4);
-
-			byte *d_state;
-			cudaMalloc((void **)&d_state, 16 * 16);
-
-			dim3 block(4, 4);
+			printf("--------Total number of states %lu       \n ", nStatesInBuffer);
 
 			/* Process every state matrix from the buffer */
-			for (states_it = 0; states_it < nStatesInBuffer; states_it+= 8) {
-				// Init current state matrix
-				//memcpy(State, Buffer + states_it * 16, 16);
+			for (states_it = 0; states_it < nStatesInBuffer/NUM_BLOCKS; states_it += 8) {
 
-				for (int i = 0; i < 16; i++) {
-					cudaMemcpyAsync(d_state + (16 * i), Buffer + (states_it + i) * 16, 16, cudaMemcpyHostToDevice, streams[i]);
-					
-				}
-
-				for (int i = 0; i < 16; i++) {
-					executeAES << <1, block, 0, streams[i] >> >(d_state + (16 * i), CYPHER_OP, gpuExpKeyBuffer);
-				}
-
-				for (int i = 0; i < 16; i++) {
-					cudaMemcpyAsync((Buffer + (states_it + i) * 16), d_state + (16 * i), 16, cudaMemcpyDeviceToHost, streams[i]);
-				}
-
-				//cudaMemcpyAsync(d_state0, Buffer + states_it * 16, 16, cudaMemcpyHostToDevice, stream0);
-				//cudaMemcpyAsync(d_state1, Buffer + (states_it + 1) * 16, 16, cudaMemcpyHostToDevice, stream1);
-				//cudaMemcpyAsync(d_state2, Buffer + (states_it + 2) * 16, 16, cudaMemcpyHostToDevice, stream2);
-				//cudaMemcpyAsync(d_state3, Buffer + (states_it + 3) * 16, 16, cudaMemcpyHostToDevice, stream3);
-				//cudaMemcpyAsync(d_state4, Buffer + (states_it + 4) * 16, 16, cudaMemcpyHostToDevice, stream4);
-				//cudaMemcpyAsync(d_state5, Buffer + (states_it + 5) * 16, 16, cudaMemcpyHostToDevice, stream5);
-				//cudaMemcpyAsync(d_state6, Buffer + (states_it + 6) * 16, 16, cudaMemcpyHostToDevice, stream6);
-				//cudaMemcpyAsync(d_state7, Buffer + (states_it + 7) * 16, 16, cudaMemcpyHostToDevice, stream7);
+				//Copies 16 bytes * 16 blocks of words
+				cudaMemcpyAsync(d_state0, Buffer + (states_it + 0) * BLOCK_SIZE, BLOCK_SIZE, cudaMemcpyHostToDevice, stream0);
+				cudaMemcpyAsync(d_state1, Buffer + (states_it + 1) * BLOCK_SIZE, BLOCK_SIZE, cudaMemcpyHostToDevice, stream1);
+				cudaMemcpyAsync(d_state2, Buffer + (states_it + 2) * BLOCK_SIZE, BLOCK_SIZE, cudaMemcpyHostToDevice, stream2);
+				cudaMemcpyAsync(d_state3, Buffer + (states_it + 3) * BLOCK_SIZE, BLOCK_SIZE, cudaMemcpyHostToDevice, stream3);
+				cudaMemcpyAsync(d_state4, Buffer + (states_it + 4) * BLOCK_SIZE, BLOCK_SIZE, cudaMemcpyHostToDevice, stream4);
+				cudaMemcpyAsync(d_state5, Buffer + (states_it + 5) * BLOCK_SIZE, BLOCK_SIZE, cudaMemcpyHostToDevice, stream5);
+				cudaMemcpyAsync(d_state6, Buffer + (states_it + 6) * BLOCK_SIZE, BLOCK_SIZE, cudaMemcpyHostToDevice, stream6);
+				cudaMemcpyAsync(d_state7, Buffer + (states_it + 7) * BLOCK_SIZE, BLOCK_SIZE, cudaMemcpyHostToDevice, stream7);
 
 				//// AES execution
-				//dim3 block(4, 4);
-				//executeAES << <1, block, 0, stream0 >> >(d_state0, CYPHER_OP, gpuExpKeyBuffer);
-				//executeAES << <1, block, 0, stream1 >> >(d_state1, CYPHER_OP, gpuExpKeyBuffer);
-				//executeAES << <1, block, 0, stream2 >> >(d_state2, CYPHER_OP, gpuExpKeyBuffer);
-				//executeAES << <1, block, 0, stream3 >> >(d_state3, CYPHER_OP, gpuExpKeyBuffer);
-				//executeAES << <1, block, 0, stream4 >> >(d_state4, CYPHER_OP, gpuExpKeyBuffer);
-				//executeAES << <1, block, 0, stream5 >> >(d_state5, CYPHER_OP, gpuExpKeyBuffer);
-				//executeAES << <1, block, 0, stream6 >> >(d_state6, CYPHER_OP, gpuExpKeyBuffer);
-				//executeAES << <1, block, 0, stream7 >> >(d_state7, CYPHER_OP, gpuExpKeyBuffer);
-
-				//cudaMemcpyAsync((Buffer + states_it * 16), d_state0, 16, cudaMemcpyDeviceToHost, stream0);
-				//cudaMemcpyAsync((Buffer + (states_it + 1) * 16), d_state1, 16, cudaMemcpyDeviceToHost, stream1);
-				//cudaMemcpyAsync((Buffer + (states_it + 2) * 16), d_state2, 16, cudaMemcpyDeviceToHost, stream2);
-				//cudaMemcpyAsync((Buffer + (states_it + 3) * 16), d_state3, 16, cudaMemcpyDeviceToHost, stream3);
-				//cudaMemcpyAsync((Buffer + (states_it + 4) * 16), d_state4, 16, cudaMemcpyDeviceToHost, stream4);
-				//cudaMemcpyAsync((Buffer + (states_it + 5) * 16), d_state5, 16, cudaMemcpyDeviceToHost, stream5);
-				//cudaMemcpyAsync((Buffer + (states_it + 6) * 16), d_state6, 16, cudaMemcpyDeviceToHost, stream6);
-				//cudaMemcpyAsync((Buffer + (states_it + 7) * 16), d_state7, 16, cudaMemcpyDeviceToHost, stream7);
+				executeAES << <grid, block, 0, stream0 >> >(d_state0, CYPHER_OP, gpuExpKeyBuffer);
+				executeAES << <grid, block, 0, stream1 >> >(d_state1, CYPHER_OP, gpuExpKeyBuffer);
+				executeAES << <grid, block, 0, stream2 >> >(d_state2, CYPHER_OP, gpuExpKeyBuffer);
+				executeAES << <grid, block, 0, stream3 >> >(d_state3, CYPHER_OP, gpuExpKeyBuffer);
+				executeAES << <grid, block, 0, stream4 >> >(d_state4, CYPHER_OP, gpuExpKeyBuffer);
+				executeAES << <grid, block, 0, stream5 >> >(d_state5, CYPHER_OP, gpuExpKeyBuffer);
+				executeAES << <grid, block, 0, stream6 >> >(d_state6, CYPHER_OP, gpuExpKeyBuffer);
+				executeAES << <grid, block, 0, stream7 >> >(d_state7, CYPHER_OP, gpuExpKeyBuffer);
+				
 				// Replace the original data on the buffer with the result.
-				//memcpy(Buffer + states_it * 16, State, 16);
-				if (states_it % 5000 == 0) {
+				cudaMemcpyAsync((Buffer + (states_it + 0) * BLOCK_SIZE), d_state0, BLOCK_SIZE, cudaMemcpyDeviceToHost, stream0);
+				cudaMemcpyAsync((Buffer + (states_it + 1) * BLOCK_SIZE), d_state1, BLOCK_SIZE, cudaMemcpyDeviceToHost, stream1);
+				cudaMemcpyAsync((Buffer + (states_it + 2) * BLOCK_SIZE), d_state2, BLOCK_SIZE, cudaMemcpyDeviceToHost, stream2);
+				cudaMemcpyAsync((Buffer + (states_it + 3) * BLOCK_SIZE), d_state3, BLOCK_SIZE, cudaMemcpyDeviceToHost, stream3);
+				cudaMemcpyAsync((Buffer + (states_it + 4) * BLOCK_SIZE), d_state4, BLOCK_SIZE, cudaMemcpyDeviceToHost, stream4);
+				cudaMemcpyAsync((Buffer + (states_it + 5) * BLOCK_SIZE), d_state5, BLOCK_SIZE, cudaMemcpyDeviceToHost, stream5);
+				cudaMemcpyAsync((Buffer + (states_it + 6) * BLOCK_SIZE), d_state6, BLOCK_SIZE, cudaMemcpyDeviceToHost, stream6);
+				cudaMemcpyAsync((Buffer + (states_it + 7) * BLOCK_SIZE), d_state7, BLOCK_SIZE, cudaMemcpyDeviceToHost, stream7);
+
+				if (states_it % 160 == 0) {
 					printf("Processed %lu%% from the buffer       \r", (states_it + 1) * 100 / nStatesInBuffer);
 				}
 			}
