@@ -56,7 +56,7 @@ along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
 #define NUM_STATE_BUFFER 33553920
 // So define the data buffer length as the max number of matrix times its size
 #define MAX_BUFFER_LENGTH STATE_SIZE*NUM_STATE_BUFFER
-#define NUM_BLOCKS 256
+#define NUM_BLOCKS 128
 #define BLOCK_SIZE STATE_SIZE*NUM_BLOCKS
 
 typedef unsigned char byte;
@@ -831,8 +831,8 @@ int main(int argc, char** argv) {
 				cudaMemcpyAsync((Buffer + (states_it + 6) * BLOCK_SIZE), d_state6, BLOCK_SIZE, cudaMemcpyDeviceToHost, stream6);
 				cudaMemcpyAsync((Buffer + (states_it + 7) * BLOCK_SIZE), d_state7, BLOCK_SIZE, cudaMemcpyDeviceToHost, stream7);
 
-				if (states_it % 160 == 0) {
-					printf("Processed %lu%% from the buffer       \r", (states_it + 1) * 100 / nStatesInBuffer);
+				if (states_it % 80 == 0) {
+					printf("Processed %lu%% from the buffer       \r", (states_it + 1) * 100 * NUM_BLOCKS / nStatesInBuffer);
 				}
 			}
 
