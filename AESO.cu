@@ -56,7 +56,7 @@ along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
 #define NUM_STATE_BUFFER 33553920
 // So define the data buffer length as the max number of matrix times its size
 #define MAX_BUFFER_LENGTH STATE_SIZE*NUM_STATE_BUFFER
-#define NUM_BLOCKS 128
+#define NUM_BLOCKS 65536
 #define BLOCK_SIZE STATE_SIZE*NUM_BLOCKS
 
 typedef unsigned char byte;
@@ -779,7 +779,7 @@ int main(int argc, char** argv) {
 
 		/* Start timing */
 		cudaEventRecord(start);
-
+		cudaEventSynchronize(start);
 		/* Load from the file and process it*/
 		while (bytesRead = LoadDataBuffer(inFile)) {
 			printf("Processing data from buffer                                   \r");
@@ -849,7 +849,7 @@ int main(int argc, char** argv) {
 			processedBytes += bytesRead;
 		}
 		cudaEventRecord(stop);
-
+		cudaEventSynchronize(stop);
 		cuda_error = cudaFree(gpuExpKeyBuffer);
 		if (cuda_error != cudaSuccess) {
 			printf("Error freeing the CUDA device's memory\n");
